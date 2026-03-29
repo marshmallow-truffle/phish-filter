@@ -130,49 +130,108 @@ Templates: `paypal` (phishing), `bank` (phishing), `benign` (GitHub notification
 
 - Node.js 22+
 - A GCP project with Gmail API and Pub/Sub API enabled
-- A Gmail account with OAuth2 credentials (client ID, client secret, refresh token)
-- A PostgreSQL database (e.g., Neon free tier)
-- An Anthropic API key
+- A PostgreSQL database (e.g., [Neon](https://neon.tech) free tier)
+- An [Anthropic API key](https://console.anthropic.com/)
 
-### 1. GCP Pub/Sub
+### 1. GCP project and Gmail OAuth2
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com), create or select a project.
+2. Enable **Gmail API** and **Cloud Pub/Sub API** under APIs & Services.
+3. Under **Credentials**, create an **OAuth 2.0 Client ID** (type: Web application).
+   - Add `http://localhost:3000/oauth/callback` as an authorized redirect URI.
+4. Note the **Client ID** and **Client Secret**.
+5. Obtain a refresh token using the [OAuth 2.0 Playground](https://developers.google.com/oauthplayground/):
+   - Click the gear icon, check "Use your own OAuth credentials", and enter your Client ID/Secret.
+   - In Step 1, authorize the scopes: `https://www.googleapis.com/auth/gmail.readonly`, `https://www.googleapis.com/auth/gmail.modify`, `https://www.googleapis.com/auth/gmail.labels`.
+   - In Step 2, exchange the authorization code for a **refresh token**.
+
+### 2. GCP Pub/Sub
 
 ```bash
 export GCP_PROJECT_ID=your-project-id
 ./scripts/setup-pubsub.sh
 ```
 
-This creates the topic, grants Gmail publish rights, and creates the pull subscription.
+This creates the `email-notifications` topic, grants `gmail-api-push@system.gserviceaccount.com` publish rights, and creates the `email-worker-sub` pull subscription with a 60s ack deadline and 7-day message retention.
 
-### 2. Environment variables
+### 3. PostgreSQL
+
+Create a database on [Neon](https://neon.tech) (free tier) or any Postgres provider. The service applies the schema automatically on startup from `schema.sql`.
+
+### 4. Environment variables
+
+Create a `.env` file (gitignored) or export directly:
 
 ```bash
+# Required
 DATABASE_URL=postgresql://user:pass@host/db
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_REFRESH_TOKEN=...
-GCP_PROJECT_ID=...
-ANTHROPIC_API_KEY=...
+GOOGLE_CLIENT_ID=your-oauth-client-id
+GOOGLE_CLIENT_SECRET=your-oauth-client-secret
+GOOGLE_REFRESH_TOKEN=your-refresh-token
+GCP_PROJECT_ID=your-gcp-project-id
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Optional (shown with defaults)
+PUBSUB_TOPIC=email-notifications
+PUBSUB_SUBSCRIPTION=email-worker-sub
+LLM_MODEL=claude-sonnet-4-20250514
+LLM_MAX_CONCURRENT=5
+QUARANTINE_LABEL_NAME=PHISH_QUARANTINE
+MAX_BODY_LENGTH=2000
+PORT=8080
 ```
 
-Optional (with defaults): `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION`, `LLM_MODEL`, `LLM_MAX_CONCURRENT`, `QUARANTINE_LABEL_NAME`, `MAX_BODY_LENGTH`, `PORT`.
-
-### 3. Run locally
+### 5. Run locally
 
 ```bash
 npm install
 npm run check   # typecheck + lint + test
-npm run dev     # starts with hot reload
+npm run dev     # starts with hot reload via tsx
 ```
 
-### 4. Deploy to Fly.io
+The service will connect to Postgres, apply the schema, set up the Gmail watch, catch up on any missed messages, and begin pulling from Pub/Sub.
+
+## Deploy
+
+### Fly.io
+
+Install the [Fly CLI](https://fly.io/docs/flyctl/install/), then:
 
 ```bash
-fly launch           # first time
-fly secrets set DATABASE_URL=... GOOGLE_CLIENT_ID=... # etc
+# First-time setup
+fly launch --no-deploy
+
+# Set secrets (all required env vars)
+fly secrets set \
+  DATABASE_URL="postgresql://user:pass@host/db" \
+  GOOGLE_CLIENT_ID="..." \
+  GOOGLE_CLIENT_SECRET="..." \
+  GOOGLE_REFRESH_TOKEN="..." \
+  GCP_PROJECT_ID="..." \
+  ANTHROPIC_API_KEY="..."
+
+# Deploy
 fly deploy
 ```
 
-The service runs with `auto_stop_machines = false` so it stays alive for Pub/Sub pull.
+The included `fly.toml` configures:
+- Region: `sjc`
+- Shared CPU, 512MB RAM
+- `auto_stop_machines = false` so the service stays alive for Pub/Sub pull
+- `min_machines_running = 1`
+
+After deploy, verify at:
+```
+https://email-classifier.fly.dev/health
+https://email-classifier.fly.dev/health/classifications
+```
+
+### Docker (any host)
+
+```bash
+docker build -t email-classifier .
+docker run -p 8080:8080 --env-file .env email-classifier
+```
 
 ## Development
 

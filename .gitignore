@@ -8,3 +8,4 @@ dist/
 !package-lock.json
 .DS_Store
 coverage/
+.claude/settings.local.json
