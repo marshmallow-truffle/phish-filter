@@ -66,6 +66,39 @@ describe("Classifier", () => {
     expect(client.messages.create).toHaveBeenCalledTimes(2);
   });
 
+  it("limits concurrent LLM calls to maxConcurrent", async () => {
+    let concurrent = 0;
+    let maxSeen = 0;
+    const client = {
+      messages: {
+        create: vi.fn().mockImplementation(async () => {
+          concurrent++;
+          maxSeen = Math.max(maxSeen, concurrent);
+          await new Promise((r) => setTimeout(r, 50));
+          concurrent--;
+          return {
+            content: [
+              {
+                text: JSON.stringify({
+                  label: "benign",
+                  confidence: 0.5,
+                  reason: "ok",
+                }),
+              },
+            ],
+          };
+        }),
+      },
+    } as any;
+    const classifier = new Classifier(client, 2);
+    await Promise.all(
+      Array.from({ length: 6 }, () =>
+        classifier.classify({ sender: "", subject: "", body: "", headers: {} })
+      )
+    );
+    expect(maxSeen).toBeLessThanOrEqual(2);
+  });
+
   it("defaults to benign on total failure", async () => {
     const client = {
       messages: {

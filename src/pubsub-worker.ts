@@ -8,11 +8,18 @@ export class PubSubWorker {
   private classifier: Classifier;
   private db: DatabasePort;
   private running = false;
+  private onClassified?: (label: string) => void;
 
-  constructor(gmail: GmailClient, classifier: Classifier, db: DatabasePort) {
+  constructor(
+    gmail: GmailClient,
+    classifier: Classifier,
+    db: DatabasePort,
+    onClassified?: (label: string) => void
+  ) {
     this.gmail = gmail;
     this.classifier = classifier;
     this.db = db;
+    this.onClassified = onClassified;
   }
 
   async processMessage(messageId: string): Promise<boolean> {
@@ -47,6 +54,7 @@ export class PubSubWorker {
       rawHeaders: email.rawHeaders,
     });
 
+    this.onClassified?.(result.label);
     console.log(
       `Classified ${messageId}: ${result.label} (${Math.round(result.confidence * 100)}%) — ${result.reason}`
     );

@@ -87,8 +87,8 @@ async function main() {
   const anthropic = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
   const classifier = new Classifier(anthropic, config.LLM_MAX_CONCURRENT, config.LLM_MODEL);
 
-  // 5. Create worker
-  const worker = new PubSubWorker(gmail, classifier, db);
+  // 5. Create worker (with health callback to track in-memory stats)
+  const worker = new PubSubWorker(gmail, classifier, db, (label) => health.record(label));
 
   // 6. Start Pub/Sub pull BEFORE catch-up (buffer messages during replay).
   //    Dedup via ON CONFLICT handles any overlap between catch-up and live messages.

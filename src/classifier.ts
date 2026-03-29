@@ -1,12 +1,5 @@
 // src/classifier.ts
-import { z } from "zod";
-import type { ClassificationResult } from "./models.js";
-
-const ClassificationResultSchema = z.object({
-  label: z.enum(["phish", "spam", "benign"]),
-  confidence: z.number().min(0).max(1),
-  reason: z.string(),
-});
+import { ClassificationResultSchema, type ClassificationResult } from "./models.js";
 
 const SYSTEM_PROMPT = `You are an email security classifier. Analyze the email and respond with ONLY a JSON object:
 {"label": "phish" | "spam" | "benign", "confidence": 0.0-1.0, "reason": "one sentence"}
@@ -37,16 +30,29 @@ export class Classifier {
     body: string;
     headers: Record<string, string>;
   }): Promise<ClassificationResult> {
-    // Semaphore: wait for a slot
-    if (this.active >= this.concurrencyLimit) {
-      await new Promise<void>((resolve) => this.queue.push(resolve));
-    }
-    this.active++;
+    await this.acquire();
     try {
       return await this.classifyInner(input);
     } finally {
+      this.release();
+    }
+  }
+
+  private acquire(): Promise<void> {
+    if (this.active < this.concurrencyLimit) {
+      this.active++;
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => this.queue.push(resolve));
+  }
+
+  private release(): void {
+    const next = this.queue.shift();
+    if (next) {
+      // Pass the slot directly to the next waiter — don't decrement
+      next();
+    } else {
       this.active--;
-      this.queue.shift()?.();
     }
   }
 
