@@ -1,0 +1,119 @@
+// tests/pipeline.test.ts
+import { describe, it, expect, vi } from "vitest";
+import { PubSubWorker } from "../src/pubsub-worker.js";
+import { parseEmailMessage } from "../src/gmail-client.js";
+
+function encode(text: string): string {
+  return Buffer.from(text).toString("base64url");
+}
+
+function makeRawMessage(
+  msgId: string,
+  sender: string,
+  subject: string,
+  body: string
+) {
+  return {
+    id: msgId,
+    historyId: "100",
+    payload: {
+      mimeType: "text/plain",
+      headers: [
+        { name: "From", value: sender },
+        { name: "Subject", value: subject },
+      ],
+      body: { data: encode(body) },
+    },
+  };
+}
+
+function makeMocks(classifyResult: { label: string; confidence: number; reason: string }) {
+  return {
+    gmail: {
+      getHistory: vi.fn().mockResolvedValue(["msg1", "msg2"]),
+      getMessage: vi.fn().mockImplementation((id: string) =>
+        Promise.resolve(
+          parseEmailMessage(
+            makeRawMessage(id, "phisher@evil.ru", "Urgent!", "Click http://evil.ru/steal")
+          )
+        )
+      ),
+      quarantineMessage: vi.fn().mockResolvedValue(undefined),
+      watch: vi.fn().mockResolvedValue({ historyId: "200", expiration: "9999" }),
+    },
+    classifier: {
+      classify: vi.fn().mockResolvedValue(classifyResult),
+    },
+    db: {
+      isProcessed: vi.fn().mockResolvedValue(false),
+      saveClassification: vi.fn().mockResolvedValue(true),
+      getLastHistoryId: vi.fn().mockResolvedValue("50"),
+      updateLastHistoryId: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+}
+
+describe("Pipeline end-to-end", () => {
+  it("processes phish: fetch → classify → quarantine → store", async () => {
+    const mocks = makeMocks({
+      label: "phish",
+      confidence: 0.95,
+      reason: "Suspicious URL",
+    });
+    const worker = new PubSubWorker(
+      mocks.gmail as any,
+      mocks.classifier as any,
+      mocks.db as any
+    );
+
+    const result = await worker.processMessage("msg1");
+    expect(result).toBe(true);
+
+    expect(mocks.gmail.getMessage).toHaveBeenCalledWith("msg1");
+    expect(mocks.classifier.classify).toHaveBeenCalledOnce();
+    expect(mocks.gmail.quarantineMessage).toHaveBeenCalledWith("msg1");
+    expect(mocks.db.saveClassification).toHaveBeenCalledOnce();
+
+    // Verify body_sent_to_llm contains actual email content
+    const saveCall = mocks.db.saveClassification.mock.calls[0][0];
+    expect(saveCall.bodySentToLlm).toContain("evil.ru/steal");
+    expect(saveCall.quarantined).toBe(true);
+  });
+
+  it("skips already-processed messages (dedup)", async () => {
+    const mocks = makeMocks({
+      label: "phish",
+      confidence: 0.95,
+      reason: "Suspicious",
+    });
+    mocks.db.isProcessed.mockResolvedValue(true);
+    const worker = new PubSubWorker(
+      mocks.gmail as any,
+      mocks.classifier as any,
+      mocks.db as any
+    );
+
+    const result = await worker.processMessage("msg1");
+    expect(result).toBe(false);
+    expect(mocks.gmail.getMessage).not.toHaveBeenCalled();
+    expect(mocks.classifier.classify).not.toHaveBeenCalled();
+  });
+
+  it("benign emails are not quarantined", async () => {
+    const mocks = makeMocks({
+      label: "benign",
+      confidence: 0.9,
+      reason: "Normal email",
+    });
+    const worker = new PubSubWorker(
+      mocks.gmail as any,
+      mocks.classifier as any,
+      mocks.db as any
+    );
+
+    await worker.processMessage("msg1");
+    expect(mocks.gmail.quarantineMessage).not.toHaveBeenCalled();
+    const saveCall = mocks.db.saveClassification.mock.calls[0][0];
+    expect(saveCall.quarantined).toBe(false);
+  });
+});
