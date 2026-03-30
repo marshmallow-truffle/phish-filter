@@ -1,5 +1,5 @@
 import type { ClassifierPort, ClassifierInput } from "./classifier.port.js";
-import type { ClassificationResult } from "./models.js";
+import { DEFAULT_CLASSIFICATION, type ClassificationResult } from "./models.js";
 
 export class ClassifierPipeline implements ClassifierPort {
   private classifiers: ClassifierPort[];
@@ -15,6 +15,6 @@ export class ClassifierPipeline implements ClassifierPort {
         return result;
       }
     }
-    return { label: "benign", confidence: 0, reason: "No classifier produced a result" };
+    return DEFAULT_CLASSIFICATION;
   }
 }

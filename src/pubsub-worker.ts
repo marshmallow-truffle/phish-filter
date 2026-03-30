@@ -1,7 +1,7 @@
-// src/pubsub-worker.ts
 import type { GmailClient } from "./gmail-client.js";
 import type { ClassifierPort } from "./classifier.port.js";
 import type { DatabasePort } from "./db.port.js";
+import { DEFAULT_CLASSIFICATION } from "./models.js";
 
 export class PubSubWorker {
   private gmail: GmailClient;
@@ -33,7 +33,7 @@ export class PubSubWorker {
       subject: email.subject,
       body: email.body,
       headers: email.rawHeaders,
-    }) ?? { label: "benign" as const, confidence: 0, reason: "No classifier produced a result" };
+    }) ?? DEFAULT_CLASSIFICATION;
 
     let quarantined = false;
     if (result.label === "phish") {

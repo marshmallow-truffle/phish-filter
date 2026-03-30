@@ -66,21 +66,6 @@ describe("RuleBasedClassifier", () => {
     expect(result).toBeNull();
   });
 
-  it("skips disabled rules", async () => {
-    const db = mockDb([makeRule({ enabled: false })]);
-    // getRules already filters by enabled=TRUE in PgDatabase,
-    // but if a disabled rule somehow gets through, it's still in the cache
-    // This test verifies the DB query filters correctly
-    const classifier = new RuleBasedClassifier(db, 0);
-
-    const result = await classifier.classify(input);
-    // The mock returns the disabled rule, but the DB would filter it.
-    // The classifier processes whatever the DB returns, so with a disabled
-    // rule that matches the domain, it would match. The filtering happens at DB level.
-    // This test just verifies the flow doesn't crash.
-    expect(result).not.toBeNull(); // rule matches domain regardless of enabled flag in cache
-  });
-
   it("handles invalid regex gracefully", async () => {
     const db = mockDb([makeRule({ field: "subject", pattern: "[invalid(" })]);
     const classifier = new RuleBasedClassifier(db, 0);

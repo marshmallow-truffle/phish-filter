@@ -1,3 +1,5 @@
+import type { ClassificationRule } from "./models.js";
+
 export interface SaveClassificationInput {
   messageId: string;
   historyId: string | null;
@@ -29,8 +31,6 @@ export interface ClassificationRow {
   quarantined: boolean;
   processed_at: string;
 }
-
-import type { ClassificationRule } from "./models.js";
 
 export interface DatabasePort {
   runSchema(schemaPath?: string): Promise<void>;

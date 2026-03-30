@@ -9,6 +9,12 @@ export const ClassificationResultSchema = z.object({
 
 export type ClassificationResult = z.infer<typeof ClassificationResultSchema>;
 
+export const DEFAULT_CLASSIFICATION: ClassificationResult = {
+  label: "benign",
+  confidence: 0,
+  reason: "No classifier produced a result",
+};
+
 export interface EmailMessage {
   messageId: string;
   historyId: string | null;
