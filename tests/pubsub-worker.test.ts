@@ -136,7 +136,6 @@ describe("PubSubWorker.processMessage", () => {
 describe("PubSubWorker account loop", () => {
   it("updates cursor to max historyId from processed messages", async () => {
     const mocks = makeMocks();
-    // Return 3 messages with different historyIds
     mocks.gmail.getHistory.mockResolvedValue(["msg1", "msg2", "msg3"]);
     let callCount = 0;
     mocks.gmail.getMessage.mockImplementation((id: string) => {
@@ -156,7 +155,6 @@ describe("PubSubWorker account loop", () => {
     const nack = vi.fn();
     worker.enqueue("user@gmail.com", ack, nack);
 
-    // Wait for processing
     await new Promise((r) => setTimeout(r, 100));
 
     expect(mocks.db.updateAccountHistoryId).toHaveBeenCalledWith("user@gmail.com", "300");
@@ -267,7 +265,6 @@ describe("PubSubWorker account loop", () => {
     worker.enqueue("user@gmail.com", ack2, vi.fn());
 
     await new Promise((r) => setTimeout(r, 50));
-    // First is processing, second hasn't started
     expect(order).toEqual([1]);
     expect(ack1).not.toHaveBeenCalled();
     expect(ack2).not.toHaveBeenCalled();
@@ -283,11 +280,10 @@ describe("PubSubWorker account loop", () => {
   });
 
   it("cursor reflects highest historyId with randomized order", async () => {
-    // Generate random historyIds and verify cursor = max
     for (const seed of [42, 99, 7, 256, 1000]) {
       const mocks = makeMocks();
       const historyIds = Array.from({ length: 5 }, (_, i) => String(seed + i * 37 + ((i * 13) % 50)));
-      const expectedMax = historyIds.reduce((a, b) => BigInt(a) > BigInt(b) ? a : b);
+      const expectedMax = historyIds.reduce((a, b) => Number(a) > Number(b) ? a : b);
 
       const msgIds = historyIds.map((_, i) => `msg${i}`);
       mocks.gmail.getHistory.mockResolvedValue(msgIds);

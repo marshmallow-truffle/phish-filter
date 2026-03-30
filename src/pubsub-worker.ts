@@ -43,8 +43,7 @@ export class PubSubWorker {
   private classifier: ClassifierPort;
   private db: DatabasePort;
   private logger: EventLogger;
-  private quarantineLabelName: string;
-  private spamLabelName: string;
+  private labelMap: Record<string, string>;
   private running = true;
   private queues = new Map<string, NotificationQueue>();
   private onClassified?: (label: string) => void;
@@ -61,12 +60,13 @@ export class PubSubWorker {
     this.classifier = classifier;
     this.db = db;
     this.logger = logger;
-    this.quarantineLabelName = labelConfig.quarantineLabelName;
-    this.spamLabelName = labelConfig.spamLabelName;
+    this.labelMap = {
+      phish: labelConfig.quarantineLabelName,
+      spam: labelConfig.spamLabelName,
+    };
     this.onClassified = onClassified;
   }
 
-  /** Process a single message. Returns the message's historyId on success, null if skipped (dedup). */
   async processMessage(messageId: string, gmail: GmailClient, accountEmail?: string): Promise<string | null> {
     if (await this.db.isProcessed(messageId)) {
       await this.logger.log({ messageId, accountEmail, stage: "message_skipped", level: "info", message: "Already processed (dedup)" });
@@ -86,21 +86,19 @@ export class PubSubWorker {
           headers: email.rawHeaders,
         }),
         { maxRetries: 3, baseDelay: 1000 }
-      ) ?? DEFAULT_CLASSIFICATION;
+      );
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       await this.logger.log({ messageId, accountEmail, stage: "classification_error", level: "error", message: `Classification failed after 3 retries: ${errMsg}`, metadata: { error: errMsg } });
       result = DEFAULT_CLASSIFICATION;
     }
 
+    if (!result) result = DEFAULT_CLASSIFICATION;
+
     const level = result.confidence === 0 && result.reason.startsWith("Classification failed") ? "warn" : "info";
     await this.logger.log({ messageId, accountEmail, stage: "classified", level, message: `${result.label} (${Math.round(result.confidence * 100)}%) — ${result.reason}`, metadata: { label: result.label, confidence: result.confidence, reason: result.reason } });
 
-    const labelMap: Record<string, string> = {
-      phish: this.quarantineLabelName,
-      spam: this.spamLabelName,
-    };
-    const labelName = labelMap[result.label];
+    const labelName = this.labelMap[result.label];
     let quarantined = false;
     if (labelName) {
       await gmail.labelMessage(messageId, labelName);
@@ -131,7 +129,6 @@ export class PubSubWorker {
     return email.historyId;
   }
 
-  /** Enqueue a notification for an account. Creates the processing loop on first call per account. */
   enqueue(emailAddress: string, ack: () => void, nack: () => void): void {
     let queue = this.queues.get(emailAddress);
     if (!queue) {
@@ -142,12 +139,10 @@ export class PubSubWorker {
     queue.push({ ack, nack });
   }
 
-  /** Trigger catch-up for an account by pushing a synthetic notification. */
   triggerCatchUp(emailAddress: string): void {
     this.enqueue(emailAddress, () => {}, () => {});
   }
 
-  /** Serial processing loop for one account. */
   private async startAccountLoop(emailAddress: string, queue: NotificationQueue): Promise<void> {
     while (this.running) {
       const notification = await queue.take();
@@ -164,8 +159,11 @@ export class PubSubWorker {
         let maxHistoryId: string | null = null;
         for (const msgId of messageIds) {
           const historyId = await this.processMessage(msgId, gmail, emailAddress);
-          if (historyId && (!maxHistoryId || BigInt(historyId) > BigInt(maxHistoryId))) {
-            maxHistoryId = historyId;
+          if (historyId) {
+            const num = Number(historyId);
+            if (!maxHistoryId || num > Number(maxHistoryId)) {
+              maxHistoryId = historyId;
+            }
           }
         }
 
@@ -195,7 +193,7 @@ export class PubSubWorker {
         }
         this.enqueue(payload.emailAddress, () => message.ack(), () => message.nack());
       } catch {
-        message.ack(); // unparseable, discard
+        message.ack();
       }
     });
 

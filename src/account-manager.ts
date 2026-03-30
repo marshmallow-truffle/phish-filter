@@ -40,7 +40,6 @@ export class AccountManager {
     }
 
     this.clients.set(email, gmail);
-    // Caller triggers catch-up via worker queue — not done here
   }
 
   /** Load all accounts from DB and register each. */
