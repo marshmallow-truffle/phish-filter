@@ -36,14 +36,22 @@ export class PubSubWorker {
     const email = await gmail.getMessage(messageId);
     await this.logger.log({ messageId, accountEmail, stage: "message_fetched", level: "info", message: `From: ${email.sender}, Subject: ${email.subject}` });
 
-    const result = await this.classifier.classify({
-      sender: email.sender,
-      subject: email.subject,
-      body: email.body,
-      headers: email.rawHeaders,
-    }) ?? DEFAULT_CLASSIFICATION;
+    let result;
+    try {
+      result = await this.classifier.classify({
+        sender: email.sender,
+        subject: email.subject,
+        body: email.body,
+        headers: email.rawHeaders,
+      }) ?? DEFAULT_CLASSIFICATION;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      await this.logger.log({ messageId, accountEmail, stage: "classification_error", level: "error", message: `Classifier threw: ${errMsg}`, metadata: { error: errMsg } });
+      result = DEFAULT_CLASSIFICATION;
+    }
 
-    await this.logger.log({ messageId, accountEmail, stage: "classified", level: "info", message: `${result.label} (${Math.round(result.confidence * 100)}%) — ${result.reason}`, metadata: { label: result.label, confidence: result.confidence, reason: result.reason } });
+    const level = result.confidence === 0 && result.reason.startsWith("Classification failed") ? "warn" : "info";
+    await this.logger.log({ messageId, accountEmail, stage: "classified", level, message: `${result.label} (${Math.round(result.confidence * 100)}%) — ${result.reason}`, metadata: { label: result.label, confidence: result.confidence, reason: result.reason } });
 
     let quarantined = false;
     if (result.label === "phish") {
