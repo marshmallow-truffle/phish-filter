@@ -93,31 +93,33 @@ export class PgDatabase implements DatabasePort {
     return res.rows;
   }
 
-  async getAccounts(): Promise<Account[]> {
-    const res = await this.pool.query(
-      "SELECT email, refresh_token, last_history_id, watch_expiration FROM accounts"
-    );
-    return res.rows.map((r: any) => ({
-      email: r.email,
-      refreshToken: r.refresh_token,
-      lastHistoryId: r.last_history_id,
-      watchExpiration: r.watch_expiration,
-    }));
-  }
-
-  async getAccount(email: string): Promise<Account | null> {
-    const res = await this.pool.query(
-      "SELECT email, refresh_token, last_history_id, watch_expiration FROM accounts WHERE email = $1",
-      [email]
-    );
-    if (res.rows.length === 0) return null;
-    const r = res.rows[0];
+  private mapAccountRow(r: any): Account {
     return {
       email: r.email,
       refreshToken: r.refresh_token,
       lastHistoryId: r.last_history_id,
-      watchExpiration: r.watch_expiration,
+      totalProcessed: r.total_processed,
+      phishCount: r.phish_count,
+      spamCount: r.spam_count,
+      benignCount: r.benign_count,
+      lastProcessedAt: r.last_processed_at,
     };
+  }
+
+  async getAccounts(): Promise<Account[]> {
+    const res = await this.pool.query(
+      "SELECT email, refresh_token, last_history_id, total_processed, phish_count, spam_count, benign_count, last_processed_at FROM accounts"
+    );
+    return res.rows.map((r: any) => this.mapAccountRow(r));
+  }
+
+  async getAccount(email: string): Promise<Account | null> {
+    const res = await this.pool.query(
+      "SELECT email, refresh_token, last_history_id, total_processed, phish_count, spam_count, benign_count, last_processed_at FROM accounts WHERE email = $1",
+      [email]
+    );
+    if (res.rows.length === 0) return null;
+    return this.mapAccountRow(res.rows[0]);
   }
 
   async upsertAccount(email: string, refreshToken: string): Promise<void> {
@@ -141,6 +143,18 @@ export class PgDatabase implements DatabasePort {
     await this.pool.query(
       "UPDATE accounts SET last_history_id = $1 WHERE email = $2",
       [historyId, email]
+    );
+  }
+
+  async removeAccount(email: string): Promise<void> {
+    await this.pool.query("DELETE FROM accounts WHERE email = $1", [email]);
+  }
+
+  async incrementAccountStats(email: string, label: string): Promise<void> {
+    const col = label === "phish" ? "phish_count" : label === "spam" ? "spam_count" : "benign_count";
+    await this.pool.query(
+      `UPDATE accounts SET total_processed = total_processed + 1, ${col} = ${col} + 1, last_processed_at = now() WHERE email = $1`,
+      [email]
     );
   }
 

@@ -47,6 +47,7 @@ function makeMocks() {
       saveClassification: vi.fn().mockResolvedValue(true),
       getAccountHistoryId: vi.fn().mockResolvedValue("50"),
       updateAccountHistoryId: vi.fn().mockResolvedValue(undefined),
+      incrementAccountStats: vi.fn().mockResolvedValue(undefined),
     },
   };
 }
@@ -70,9 +71,9 @@ describe("PubSubWorker", () => {
     expect(mocks.gmail.getMessage).toHaveBeenCalledWith("msg1");
     expect(mocks.classifier.classify).toHaveBeenCalledOnce();
     expect(mocks.db.saveClassification).toHaveBeenCalledOnce();
-    // Verify accountEmail is passed through
     const saveCall = mocks.db.saveClassification.mock.calls[0][0];
     expect(saveCall.accountEmail).toBe("user@gmail.com");
+    expect(mocks.db.incrementAccountStats).toHaveBeenCalledWith("user@gmail.com", "benign");
   });
 
   it("skips already-processed message", async () => {

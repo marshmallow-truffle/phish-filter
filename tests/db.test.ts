@@ -79,15 +79,19 @@ describe("PgDatabase", () => {
     expect(sql).toContain("WHERE enabled = TRUE");
   });
 
-  it("getAccounts returns mapped rows", async () => {
+  it("getAccounts returns mapped rows with stats", async () => {
     pool.query.mockResolvedValueOnce({
-      rows: [{ email: "a@b.com", refresh_token: "tok", last_history_id: "50", watch_expiration: null }],
+      rows: [{
+        email: "a@b.com", refresh_token: "tok", last_history_id: "50",
+        total_processed: 10, phish_count: 2, spam_count: 3, benign_count: 5,
+        last_processed_at: "2026-03-29T10:00:00Z",
+      }],
     });
     const accounts = await db.getAccounts();
     expect(accounts).toHaveLength(1);
     expect(accounts[0].email).toBe("a@b.com");
-    expect(accounts[0].refreshToken).toBe("tok");
-    expect(accounts[0].lastHistoryId).toBe("50");
+    expect(accounts[0].totalProcessed).toBe(10);
+    expect(accounts[0].phishCount).toBe(2);
   });
 
   it("upsertAccount calls INSERT ON CONFLICT", async () => {
@@ -103,6 +107,23 @@ describe("PgDatabase", () => {
     expect(await db.getAccountHistoryId("a@b.com")).toBe("999");
   });
 
+  it("removeAccount calls DELETE", async () => {
+    pool.query.mockResolvedValueOnce({ rows: [] });
+    await db.removeAccount("a@b.com");
+    const [sql, params] = pool.query.mock.calls[0];
+    expect(sql).toContain("DELETE FROM accounts");
+    expect(params[0]).toBe("a@b.com");
+  });
+
+  it("incrementAccountStats updates counts", async () => {
+    pool.query.mockResolvedValueOnce({ rows: [] });
+    await db.incrementAccountStats("a@b.com", "phish");
+    const [sql, params] = pool.query.mock.calls[0];
+    expect(sql).toContain("total_processed = total_processed + 1");
+    expect(sql).toContain("phish_count = phish_count + 1");
+    expect(params[0]).toBe("a@b.com");
+  });
+
   it("implements DatabasePort interface", () => {
     const port: DatabasePort = db;
     expect(port.isProcessed).toBeTypeOf("function");
@@ -116,6 +137,8 @@ describe("PgDatabase", () => {
     expect(port.upsertAccount).toBeTypeOf("function");
     expect(port.getAccountHistoryId).toBeTypeOf("function");
     expect(port.updateAccountHistoryId).toBeTypeOf("function");
+    expect(port.removeAccount).toBeTypeOf("function");
+    expect(port.incrementAccountStats).toBeTypeOf("function");
     expect(port.close).toBeTypeOf("function");
   });
 });

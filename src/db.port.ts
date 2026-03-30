@@ -4,7 +4,11 @@ export interface Account {
   email: string;
   refreshToken: string;
   lastHistoryId: string;
-  watchExpiration: Date | null;
+  totalProcessed: number;
+  phishCount: number;
+  spamCount: number;
+  benignCount: number;
+  lastProcessedAt: Date | null;
 }
 
 export interface SaveClassificationInput {
@@ -54,5 +58,7 @@ export interface DatabasePort {
   upsertAccount(email: string, refreshToken: string): Promise<void>;
   getAccountHistoryId(email: string): Promise<string>;
   updateAccountHistoryId(email: string, historyId: string): Promise<void>;
+  removeAccount(email: string): Promise<void>;
+  incrementAccountStats(email: string, label: string): Promise<void>;
   close(): Promise<void>;
 }

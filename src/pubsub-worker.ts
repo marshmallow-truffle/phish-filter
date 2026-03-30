@@ -56,6 +56,9 @@ export class PubSubWorker {
       accountEmail,
     });
 
+    if (accountEmail) {
+      await this.db.incrementAccountStats(accountEmail, result.label);
+    }
     this.onClassified?.(result.label);
     console.log(
       `Classified ${messageId}: ${result.label} (${Math.round(result.confidence * 100)}%) — ${result.reason}`

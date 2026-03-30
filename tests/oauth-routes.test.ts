@@ -30,6 +30,7 @@ import { createOAuthRoutes } from "../src/oauth-routes.js";
 function mockAccountManager() {
   return {
     register: vi.fn().mockResolvedValue(undefined),
+    unregister: vi.fn(),
     get: vi.fn(),
     emails: vi.fn().mockReturnValue([]),
     has: vi.fn().mockReturnValue(false),
@@ -39,9 +40,13 @@ function mockAccountManager() {
 function mockDb() {
   return {
     getAccounts: vi.fn().mockResolvedValue([
-      { email: "existing@gmail.com", refreshToken: "tok", lastHistoryId: "100", watchExpiration: null },
+      {
+        email: "existing@gmail.com", refreshToken: "tok", lastHistoryId: "100",
+        totalProcessed: 5, phishCount: 1, spamCount: 2, benignCount: 2, lastProcessedAt: null,
+      },
     ]),
     upsertAccount: vi.fn().mockResolvedValue(undefined),
+    removeAccount: vi.fn().mockResolvedValue(undefined),
   } as any;
 }
 
@@ -85,5 +90,17 @@ describe("OAuth routes", () => {
     const app = createOAuthRoutes(mockAccountManager(), mockDb(), oauthConfig);
     const res = await app.request("/oauth/callback");
     expect(res.status).toBe(400);
+  });
+
+  it("POST /accounts/:email/remove deletes and redirects", async () => {
+    const am = mockAccountManager();
+    const db = mockDb();
+    const app = createOAuthRoutes(am, db, oauthConfig);
+
+    const res = await app.request("/accounts/existing%40gmail.com/remove", { method: "POST" });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/");
+    expect(db.removeAccount).toHaveBeenCalledWith("existing@gmail.com");
+    expect(am.unregister).toHaveBeenCalledWith("existing@gmail.com");
   });
 });

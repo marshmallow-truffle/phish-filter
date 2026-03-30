@@ -26,26 +26,40 @@ export function createOAuthRoutes(
   app.get("/", async (c) => {
     const accounts = await db.getAccounts();
     const accountRows = accounts
-      .map((a) => `<tr><td>${a.email}</td><td>${a.lastHistoryId}</td><td>${a.watchExpiration ?? "unknown"}</td></tr>`)
+      .map((a) => `<tr>
+        <td>${a.email}</td>
+        <td>${a.lastHistoryId}</td>
+        <td>${a.totalProcessed}</td>
+        <td>${a.phishCount}</td>
+        <td>${a.spamCount}</td>
+        <td>${a.benignCount}</td>
+        <td>${a.lastProcessedAt ? new Date(a.lastProcessedAt).toLocaleString() : "—"}</td>
+        <td><form method="POST" action="/accounts/${encodeURIComponent(a.email)}/remove" style="margin:0" onsubmit="return confirm('Remove ${a.email}?')"><button type="submit" class="btn-remove">Remove</button></form></td>
+      </tr>`)
       .join("\n");
 
     return c.html(`<!DOCTYPE html>
 <html>
 <head><title>Phish Filter</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+  body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 40px auto; padding: 0 20px; }
   table { border-collapse: collapse; width: 100%; margin: 20px 0; }
   th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
   th { background: #f5f5f5; }
   .btn { display: inline-block; padding: 10px 20px; background: #4285f4; color: white; text-decoration: none; border-radius: 4px; }
   .btn:hover { background: #3367d6; }
+  .btn-remove { padding: 4px 12px; background: #d93025; color: white; border: none; border-radius: 4px; cursor: pointer; }
+  .btn-remove:hover { background: #b71c1c; }
 </style>
 </head>
 <body>
   <h1>Phish Filter</h1>
   <h2>Monitored Accounts</h2>
   ${accounts.length > 0
-    ? `<table><tr><th>Email</th><th>Last History ID</th><th>Watch Expiry</th></tr>${accountRows}</table>`
+    ? `<table>
+        <tr><th>Email</th><th>History ID</th><th>Processed</th><th>Phish</th><th>Spam</th><th>Benign</th><th>Last Processed</th><th></th></tr>
+        ${accountRows}
+      </table>`
     : "<p>No accounts registered yet.</p>"}
   <a href="/oauth/authorize" class="btn">Add Gmail Account</a>
   <h2>Quick Links</h2>
@@ -55,6 +69,13 @@ export function createOAuthRoutes(
   </ul>
 </body>
 </html>`);
+  });
+
+  app.post("/accounts/:email/remove", async (c) => {
+    const email = decodeURIComponent(c.req.param("email"));
+    await db.removeAccount(email);
+    accountManager.unregister(email);
+    return c.redirect("/");
   });
 
   app.get("/oauth/authorize", (c) => {

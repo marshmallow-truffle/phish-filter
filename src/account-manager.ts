@@ -71,6 +71,11 @@ export class AccountManager {
     return Array.from(this.clients.keys());
   }
 
+  /** Remove an account from the runtime registry. */
+  unregister(email: string): void {
+    this.clients.delete(email);
+  }
+
   /** Check if an account is registered. */
   has(email: string): boolean {
     return this.clients.has(email);

@@ -28,7 +28,11 @@ CREATE TABLE IF NOT EXISTS accounts (
     email           TEXT PRIMARY KEY,
     refresh_token   TEXT NOT NULL,
     last_history_id TEXT NOT NULL DEFAULT '0',
-    watch_expiration TIMESTAMPTZ,
+    total_processed INT DEFAULT 0,
+    phish_count     INT DEFAULT 0,
+    spam_count      INT DEFAULT 0,
+    benign_count    INT DEFAULT 0,
+    last_processed_at TIMESTAMPTZ,
     added_at        TIMESTAMPTZ DEFAULT now()
 );
 
