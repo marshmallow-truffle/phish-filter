@@ -81,8 +81,9 @@ For each message_id:
   ├── Already in DB? → skip (dedup)
   ├── messages.get(format="full") → parse MIME tree
   │     └── Prefer text/plain, strip HTML, truncate to 2000 chars
-  ├── LLM classify → {label, confidence, reason}
-  ├── If "phish" → move to PHISH_QUARANTINE label (not Trash)
+  ├── Classify: rule-based first → LLM fallback if no rule matches
+  ├── If "phish" → PHISH_QUARANTINE label + remove from inbox
+  ├── If "spam" → SPAM_DETECTED label + remove from inbox
   ├── Store in Postgres (with body sent to LLM for audit)
   └── Update history cursor
   │
@@ -90,7 +91,7 @@ For each message_id:
 ACK the Pub/Sub message (only after full pipeline succeeds)
 ```
 
-Quarantine uses a custom Gmail label instead of Trash so quarantined messages are visible in the inbox UI and don't auto-delete after 30 days.
+Custom Gmail labels are used instead of Trash so labeled messages are visible in Gmail and don't auto-delete after 30 days.
 
 ### Tradeoffs
 
@@ -100,40 +101,28 @@ Quarantine uses a custom Gmail label instead of Trash so quarantined messages ar
 
 ## Verification
 
-### Health endpoint
+### Web dashboard
+
+Visit `http://localhost:8080/` — the single-page dashboard shows:
+
+- **Health status** — uptime, DB connectivity, total processed
+- **Monitored accounts** — per-account stats (processed, phish, spam, benign, failed) with add/remove
+- **Classification rules** — view, add, and remove rules for the rule-based classifier
+- **Recent classifications** — sender, subject, label, confidence, with link to event trace
+- **Event lookup** — search by message ID to see the full processing trace
+- **Recent events** — last 50 events across all accounts
+
+### JSON API endpoints
 
 ```
-GET /health
+GET /health                          → service status + classification counts
+GET /health/classifications?limit=20 → recent classification records
+GET /events?message_id=...           → event trace for a specific email
 ```
-
-Returns service status, uptime, DB connectivity, and classification counts:
-
-```json
-{
-  "status": "healthy",
-  "uptime_seconds": 43210,
-  "messages_processed_total": 47,
-  "db_connected": true,
-  "db_recent_hour_count": 5,
-  "classifications_summary": {
-    "phish_count": 3,
-    "spam_count": 12,
-    "benign_count": 32
-  }
-}
-```
-
-### Recent classifications
-
-```
-GET /health/classifications?limit=20
-```
-
-Returns the most recent classification results with sender, subject, label, confidence, and quarantine status.
 
 ### Send a test email
 
-You can send test phishing and benign emails to the monitored inbox:
+Forward or send any email to the monitored Gmail account, or use the test script:
 
 ```bash
 npx tsx scripts/send-test-email.ts \
@@ -220,9 +209,10 @@ ANTHROPIC_API_KEY=sk-ant-...
 GOOGLE_REFRESH_TOKEN=                  # not needed — add accounts via web UI instead
 PUBSUB_TOPIC=email-notifications
 PUBSUB_SUBSCRIPTION=email-worker-sub
-LLM_MODEL=claude-sonnet-4-20250514
+LLM_MODEL=claude-haiku-4-5-20251001
 LLM_MAX_CONCURRENT=5
 QUARANTINE_LABEL_NAME=PHISH_QUARANTINE
+SPAM_LABEL_NAME=SPAM_DETECTED
 MAX_BODY_LENGTH=2000
 OAUTH_REDIRECT_URI=http://localhost:8080/oauth/callback
 PORT=8080
@@ -238,44 +228,6 @@ npm run dev     # starts with hot reload via tsx
 
 Then visit **http://localhost:8080/** to add Gmail accounts via the web UI.
 
-## Deploy
-
-### Fly.io
-
-Install the [Fly CLI](https://fly.io/docs/flyctl/install/), then:
-
-```bash
-# First-time setup
-fly launch --no-deploy
-
-# Set secrets (all required env vars)
-fly secrets set \
-  DATABASE_URL="postgresql://user:pass@host/db" \
-  GOOGLE_CLIENT_ID="..." \
-  GOOGLE_CLIENT_SECRET="..." \
-  GCP_PROJECT_ID="..." \
-  ANTHROPIC_API_KEY="..." \
-  OAUTH_REDIRECT_URI="https://your-app.fly.dev/oauth/callback"
-
-# Deploy
-fly deploy
-```
-
-The included `fly.toml` configures:
-- Region: `sjc`
-- Shared CPU, 512MB RAM
-- `auto_stop_machines = false` so the service stays alive for Pub/Sub pull
-- `min_machines_running = 1`
-
-After deploy, verify at `https://your-app.fly.dev/`.
-
-### Docker (any host)
-
-```bash
-docker build -t email-classifier .
-docker run -p 8080:8080 --env-file .env email-classifier
-```
-
 ## Development
 
 ```bash
@@ -285,24 +237,3 @@ npm test            # run tests
 npm run lint        # ESLint
 npm run dev         # dev server with hot reload
 ```
-
-### Project structure
-
-```
-src/
-  config.ts           Environment config (Zod validated)
-  credentials.ts      OAuth2 token management
-  gmail-client.ts     Gmail API: watch, history, fetch, MIME parsing, quarantine
-  pubsub-worker.ts    Pull subscription loop, catch-up, pipeline orchestration
-  classifier.ts       LLM classification with concurrency semaphore
-  db.port.ts          Database interface (consumers depend on this)
-  db.pg.ts            PostgreSQL implementation
-  models.ts           Zod schemas and TypeScript types
-  health.ts           In-memory stats tracker
-  retry.ts            Exponential backoff utility
-  index.ts            Hono app, health endpoints, startup sequence
-```
-
-### Test coverage
-
-42 tests across 9 files covering: retry logic, credential management, MIME parsing, LLM classification (including malformed response handling and concurrency limiting), database dedup and health queries, Pub/Sub worker pipeline, health endpoints, and end-to-end flow.
