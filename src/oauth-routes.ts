@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { google } from "googleapis";
 import type { AccountManager } from "./account-manager.js";
-import type { DatabasePort } from "./db.port.js";
+import type { Database, LogStore } from "./db.port.js";
 import type { ServiceHealth } from "./health.js";
 
 const SCOPES = [
@@ -19,7 +19,8 @@ export interface OAuthConfig {
 
 export function createOAuthRoutes(
   accountManager: AccountManager,
-  db: DatabasePort,
+  db: Database,
+  log: LogStore,
   health: ServiceHealth,
   oauthConfig: OAuthConfig,
 ) {
@@ -28,10 +29,10 @@ export function createOAuthRoutes(
   app.get("/", async (c) => {
     const [accounts, classifications, rules, dbHealth, recentEvents] = await Promise.all([
       db.getAccounts(),
-      db.getRecentClassifications(20),
+      log.getRecentClassifications(20),
       db.getRules(),
-      db.checkHealth().catch(() => null),
-      db.getRecentEvents(50),
+      log.checkHealth().catch(() => null),
+      log.getRecentEvents(50),
     ]);
 
     const accountRows = accounts
@@ -183,7 +184,7 @@ export function createOAuthRoutes(
   app.get("/events", async (c) => {
     const messageId = c.req.query("message_id");
     if (!messageId) return c.redirect("/");
-    const events = await db.getEvents(messageId);
+    const events = await log.getEvents(messageId);
     const rows = events
       .map((e) => `<tr>
         <td>${e.seq}</td>

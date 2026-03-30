@@ -2,14 +2,16 @@ import pg from "pg";
 import { readFileSync } from "fs";
 import type {
   Account,
-  DatabasePort,
+  Database,
+  LogStore,
   SaveClassificationInput,
   HealthStats,
   ClassificationRow,
+  EventRow,
 } from "./db.port.js";
 import type { ClassificationRule } from "./models.js";
 
-export class PgDatabase implements DatabasePort {
+export class PgDatabase implements Database, LogStore {
   private pool: pg.Pool;
 
   constructor(pool?: pg.Pool) {
@@ -108,15 +110,6 @@ export class PgDatabase implements DatabasePort {
     return res.rows.map((r: any) => this.mapAccountRow(r));
   }
 
-  async getAccount(email: string): Promise<Account | null> {
-    const res = await this.pool.query(
-      "SELECT email, refresh_token, last_history_id, total_processed, phish_count, spam_count, benign_count, last_processed_at FROM accounts WHERE email = $1",
-      [email]
-    );
-    if (res.rows.length === 0) return null;
-    return this.mapAccountRow(res.rows[0]);
-  }
-
   async upsertAccount(email: string, refreshToken: string): Promise<void> {
     await this.pool.query(
       `INSERT INTO accounts (email, refresh_token)
@@ -162,7 +155,7 @@ export class PgDatabase implements DatabasePort {
     );
   }
 
-  async getEvents(messageId: string) {
+  async getEvents(messageId: string): Promise<EventRow[]> {
     const res = await this.pool.query(
       "SELECT message_id, seq, account_email, stage, level, message, metadata, created_at FROM events WHERE message_id = $1 ORDER BY seq",
       [messageId]
@@ -170,7 +163,7 @@ export class PgDatabase implements DatabasePort {
     return res.rows;
   }
 
-  async getRecentEvents(limit = 50) {
+  async getRecentEvents(limit = 50): Promise<EventRow[]> {
     const res = await this.pool.query(
       "SELECT message_id, seq, account_email, stage, level, message, metadata, created_at FROM events ORDER BY created_at DESC LIMIT $1",
       [limit]

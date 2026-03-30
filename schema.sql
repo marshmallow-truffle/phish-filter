@@ -33,7 +33,6 @@ CREATE TABLE IF NOT EXISTS classifications (
     processed_at    TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_classifications_label ON classifications(label);
 CREATE INDEX IF NOT EXISTS idx_classifications_processed_at ON classifications(processed_at);
 
 CREATE TABLE IF NOT EXISTS events (

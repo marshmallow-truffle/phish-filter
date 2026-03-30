@@ -1,9 +1,9 @@
-import type { DatabasePort } from "./db.port.js";
+import type { LogStore } from "./db.port.js";
 
 export class EventLogger {
-  private db: DatabasePort;
+  private db: LogStore;
 
-  constructor(db: DatabasePort) {
+  constructor(db: LogStore) {
     this.db = db;
   }
 

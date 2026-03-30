@@ -1,18 +1,18 @@
 import type { ClassifierPort, ClassifierInput } from "./classifier.port.js";
 import type { ClassificationResult, ClassificationRule } from "./models.js";
-import type { DatabasePort } from "./db.port.js";
+import type { Database } from "./db.port.js";
 
 interface CompiledRule extends ClassificationRule {
   compiledPattern?: RegExp;
 }
 
 export class RuleBasedClassifier implements ClassifierPort {
-  private db: DatabasePort;
+  private db: Database;
   private rulesCache: CompiledRule[] = [];
   private lastRefresh = 0;
   private refreshIntervalMs: number;
 
-  constructor(db: DatabasePort, refreshIntervalMs = 60_000) {
+  constructor(db: Database, refreshIntervalMs = 60_000) {
     this.db = db;
     this.refreshIntervalMs = refreshIntervalMs;
   }

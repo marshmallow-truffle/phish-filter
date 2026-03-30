@@ -42,25 +42,39 @@ export interface ClassificationRow {
   processed_at: string;
 }
 
-export interface DatabasePort {
-  runSchema(schemaPath?: string): Promise<void>;
-  isProcessed(messageId: string): Promise<boolean>;
-  saveClassification(record: SaveClassificationInput): Promise<boolean>;
+export interface EventRow {
+  message_id: string;
+  seq: number;
+  account_email: string | null;
+  stage: string;
+  level: string;
+  message: string;
+  metadata: any;
+  created_at: string;
+}
 
-  checkHealth(): Promise<HealthStats>;
-  getRecentClassifications(limit?: number): Promise<ClassificationRow[]>;
+/** Small, consistent dataset: accounts, rules, history cursors. */
+export interface Database {
+  runSchema(schemaPath?: string): Promise<void>;
+  close(): Promise<void>;
+  getAccounts(): Promise<Account[]>;
+  upsertAccount(email: string, refreshToken: string): Promise<void>;
+  removeAccount(email: string): Promise<void>;
+  getAccountHistoryId(email: string): Promise<string>;
+  updateAccountHistoryId(email: string, historyId: string): Promise<void>;
+  incrementAccountStats(email: string, label: string): Promise<void>;
   getRules(): Promise<ClassificationRule[]>;
   saveRule(rule: { field: string; pattern: string; label: string; confidence: number; reason: string }): Promise<void>;
   removeRule(id: string): Promise<void>;
-  getAccounts(): Promise<Account[]>;
-  getAccount(email: string): Promise<Account | null>;
-  upsertAccount(email: string, refreshToken: string): Promise<void>;
-  getAccountHistoryId(email: string): Promise<string>;
-  updateAccountHistoryId(email: string, historyId: string): Promise<void>;
-  removeAccount(email: string): Promise<void>;
-  incrementAccountStats(email: string, label: string): Promise<void>;
+}
+
+/** Append-heavy, periodically truncated: classifications, events. */
+export interface LogStore {
+  isProcessed(messageId: string): Promise<boolean>;
+  saveClassification(record: SaveClassificationInput): Promise<boolean>;
+  checkHealth(): Promise<HealthStats>;
+  getRecentClassifications(limit?: number): Promise<ClassificationRow[]>;
   logEvent(event: { messageId: string; accountEmail?: string; stage: string; level: string; message: string; metadata?: Record<string, any> }): Promise<void>;
-  getEvents(messageId: string): Promise<Array<{ message_id: string; seq: number; account_email: string | null; stage: string; level: string; message: string; metadata: any; created_at: string }>>;
-  getRecentEvents(limit?: number): Promise<Array<{ message_id: string; seq: number; account_email: string | null; stage: string; level: string; message: string; metadata: any; created_at: string }>>;
-  close(): Promise<void>;
+  getEvents(messageId: string): Promise<EventRow[]>;
+  getRecentEvents(limit?: number): Promise<EventRow[]>;
 }

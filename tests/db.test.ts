@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PgDatabase } from "../src/db.pg.js";
-import type { DatabasePort } from "../src/db.port.js";
+import type { Database, LogStore } from "../src/db.port.js";
 
 function mockPool() {
   return {
@@ -10,7 +10,7 @@ function mockPool() {
 }
 
 describe("PgDatabase", () => {
-  let db: DatabasePort;
+  let db: Database & LogStore;
   let pool: ReturnType<typeof mockPool>;
 
   beforeEach(() => {
@@ -136,25 +136,29 @@ describe("PgDatabase", () => {
     expect(params[0]).toBe("msg1");
   });
 
-  it("implements DatabasePort interface", () => {
-    const port: DatabasePort = db;
-    expect(port.isProcessed).toBeTypeOf("function");
-    expect(port.saveClassification).toBeTypeOf("function");
+  it("implements Database interface", () => {
+    const d: Database = db;
+    expect(d.runSchema).toBeTypeOf("function");
+    expect(d.close).toBeTypeOf("function");
+    expect(d.getAccounts).toBeTypeOf("function");
+    expect(d.upsertAccount).toBeTypeOf("function");
+    expect(d.removeAccount).toBeTypeOf("function");
+    expect(d.getAccountHistoryId).toBeTypeOf("function");
+    expect(d.updateAccountHistoryId).toBeTypeOf("function");
+    expect(d.incrementAccountStats).toBeTypeOf("function");
+    expect(d.getRules).toBeTypeOf("function");
+    expect(d.saveRule).toBeTypeOf("function");
+    expect(d.removeRule).toBeTypeOf("function");
+  });
 
-    expect(port.checkHealth).toBeTypeOf("function");
-    expect(port.getRecentClassifications).toBeTypeOf("function");
-    expect(port.getRules).toBeTypeOf("function");
-    expect(port.saveRule).toBeTypeOf("function");
-    expect(port.removeRule).toBeTypeOf("function");
-    expect(port.getAccounts).toBeTypeOf("function");
-    expect(port.upsertAccount).toBeTypeOf("function");
-    expect(port.getAccountHistoryId).toBeTypeOf("function");
-    expect(port.updateAccountHistoryId).toBeTypeOf("function");
-    expect(port.removeAccount).toBeTypeOf("function");
-    expect(port.incrementAccountStats).toBeTypeOf("function");
-    expect(port.logEvent).toBeTypeOf("function");
-    expect(port.getEvents).toBeTypeOf("function");
-    expect(port.getRecentEvents).toBeTypeOf("function");
-    expect(port.close).toBeTypeOf("function");
+  it("implements LogStore interface", () => {
+    const l: LogStore = db;
+    expect(l.isProcessed).toBeTypeOf("function");
+    expect(l.saveClassification).toBeTypeOf("function");
+    expect(l.checkHealth).toBeTypeOf("function");
+    expect(l.getRecentClassifications).toBeTypeOf("function");
+    expect(l.logEvent).toBeTypeOf("function");
+    expect(l.getEvents).toBeTypeOf("function");
+    expect(l.getRecentEvents).toBeTypeOf("function");
   });
 });

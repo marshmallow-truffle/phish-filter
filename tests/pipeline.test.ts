@@ -43,9 +43,11 @@ function makeMocks(classifyResult: { label: string; confidence: number; reason: 
     accountManager: { get: vi.fn().mockReturnValue(gmail) },
     classifier: { classify: vi.fn().mockResolvedValue(classifyResult) },
     db: {
+      incrementAccountStats: vi.fn().mockResolvedValue(undefined),
+    },
+    log: {
       isProcessed: vi.fn().mockResolvedValue(false),
       saveClassification: vi.fn().mockResolvedValue(true),
-      incrementAccountStats: vi.fn().mockResolvedValue(undefined),
       logEvent: vi.fn().mockResolvedValue(undefined),
     },
     logger: { log: vi.fn().mockResolvedValue(undefined) },
@@ -63,6 +65,7 @@ describe("Pipeline end-to-end", () => {
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
+      mocks.log as any,
       mocks.logger as any,
       { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED", maxMessagesPerBatch: 5 }
     );
@@ -73,9 +76,9 @@ describe("Pipeline end-to-end", () => {
     expect(mocks.gmail.getMessage).toHaveBeenCalledWith("msg1");
     expect(mocks.classifier.classify).toHaveBeenCalledOnce();
     expect(mocks.gmail.labelMessage).toHaveBeenCalledWith("msg1", "PHISH_QUARANTINE");
-    expect(mocks.db.saveClassification).toHaveBeenCalledOnce();
+    expect(mocks.log.saveClassification).toHaveBeenCalledOnce();
 
-    const saveCall = mocks.db.saveClassification.mock.calls[0][0];
+    const saveCall = mocks.log.saveClassification.mock.calls[0][0];
     expect(saveCall.label).toBe("phish");
     expect(saveCall.quarantined).toBe(true);
   });
@@ -86,11 +89,12 @@ describe("Pipeline end-to-end", () => {
       confidence: 0.95,
       reason: "Suspicious",
     });
-    mocks.db.isProcessed.mockResolvedValue(true);
+    mocks.log.isProcessed.mockResolvedValue(true);
     const worker = new PubSubWorker(
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
+      mocks.log as any,
       mocks.logger as any,
       { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED", maxMessagesPerBatch: 5 }
     );
@@ -111,13 +115,14 @@ describe("Pipeline end-to-end", () => {
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
+      mocks.log as any,
       mocks.logger as any,
       { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED", maxMessagesPerBatch: 5 }
     );
 
     await worker.processMessage("msg1", mocks.gmail as any);
     expect(mocks.gmail.labelMessage).not.toHaveBeenCalled();
-    const saveCall = mocks.db.saveClassification.mock.calls[0][0];
+    const saveCall = mocks.log.saveClassification.mock.calls[0][0];
     expect(saveCall.quarantined).toBe(false);
   });
 });

@@ -1,9 +1,8 @@
 import { Hono } from "hono";
-import type { DatabasePort } from "./db.port.js";
+import type { LogStore } from "./db.port.js";
 import { ServiceHealth } from "./health.js";
 
-// Exported for testability — endpoints only depend on DatabasePort + health
-export function createApp(db: DatabasePort, health: ServiceHealth, extraRoutes?: Hono) {
+export function createApp(log: LogStore, health: ServiceHealth, extraRoutes?: Hono) {
   const app = new Hono();
 
   if (extraRoutes) {
@@ -14,7 +13,7 @@ export function createApp(db: DatabasePort, health: ServiceHealth, extraRoutes?:
     let dbHealth: any = {};
     let dbConnected = false;
     try {
-      dbHealth = await db.checkHealth();
+      dbHealth = await log.checkHealth();
       dbConnected = true;
     } catch {
       // DB unreachable
@@ -46,7 +45,7 @@ export function createApp(db: DatabasePort, health: ServiceHealth, extraRoutes?:
     if (isNaN(limit) || limit < 1 || limit > 100) {
       return c.json({ error: "limit must be between 1 and 100" }, 400);
     }
-    const rows = await db.getRecentClassifications(limit);
+    const rows = await log.getRecentClassifications(limit);
     return c.json(rows);
   });
 
@@ -99,7 +98,7 @@ async function main() {
   // 5. Create event logger and worker
   const { EventLogger } = await import("./event-logger.js");
   const logger = new EventLogger(db);
-  const worker = new PubSubWorker(accountManager, classifier, db, logger, {
+  const worker = new PubSubWorker(accountManager, classifier, db, db, logger, {
     quarantineLabelName: config.QUARANTINE_LABEL_NAME,
     spamLabelName: config.SPAM_LABEL_NAME,
     maxMessagesPerBatch: config.MAX_MESSAGES_PER_BATCH,
@@ -117,11 +116,11 @@ async function main() {
   });
 
   // 8. Start HTTP server with OAuth routes
-  const oauthRoutes = createOAuthRoutes(accountManager, db, health, {
+  const oauthRoutes = createOAuthRoutes(accountManager, db, db, health, {
     ...oauthConfig,
     redirectUri: config.OAUTH_REDIRECT_URI,
   });
-  const app = createApp(db, health, oauthRoutes);
+  const app = createApp(db, health, oauthRoutes); // db as LogStore
   serve({ fetch: app.fetch, port: config.PORT }, (info) => {
     console.log(`Server running on port ${info.port} — steady state`);
     console.log(`Add Gmail accounts at http://localhost:${info.port}/`);

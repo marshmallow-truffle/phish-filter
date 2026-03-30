@@ -16,40 +16,9 @@ The cursor advances to the **highest historyId of successfully processed message
 
 ### Database isolation
 
-All database access goes through a `DatabasePort` interface (`src/db.port.ts`). The production implementation is `PgDatabase` (`src/db.pg.ts`), but swapping to SQLite, DynamoDB, or an in-memory store requires only a new class implementing the interface. No other code needs to change.
+Database access is split into two interfaces (`src/db.port.ts`): **Database** (accounts, rules, history cursors — small, consistent) and **LogStore** (classifications, events — append-heavy, truncatable). `PgDatabase` implements both. Swapping storage backends requires only a new implementation of the relevant interface.
 
-### Message processing pipeline
-
-```
-Pub/Sub notification
-  │
-  ▼
-history.list(startHistoryId) → list of message IDs
-  │
-  ▼
-For each message_id:
-  ├── Already in DB? → skip (dedup)
-  ├── messages.get(format="full") → parse MIME tree
-  │     └── Prefer text/plain, strip HTML, truncate to 2000 chars
-  ├── Classify: rule-based first → LLM fallback if no rule matches
-  ├── If "phish" → PHISH_QUARANTINE label + remove from inbox
-  ├── If "spam" → SPAM_DETECTED label + remove from inbox
-  ├── Store in Postgres (with body sent to LLM for audit)
-  └── Update history cursor
-  │
-  ▼
-ACK the Pub/Sub message (only after full pipeline succeeds)
-```
-
-Custom Gmail labels are used instead of Trash so labeled messages are visible in Gmail and don't auto-delete after 30 days.
-
-### Tradeoffs
-
-- **Classification** uses a single LLM call per message. Production would add URL reputation checks, sender verification (SPF/DKIM/DMARC parsing), ensemble models, and human review for low-confidence results. Intentionally kept simple since the focus is on the delivery infrastructure.
-- **Watch expiry**: Gmail `watch()` expires after 7 days. A production system would renew on a cron. Not implemented since it's not relevant for a short-lived demo.
-- **History expiry**: Gmail history records expire after ~30 days. The catch-up mechanism relies on history being available, so a production system would need a fallback full-sync path.
-
-## Verification
+## Observability
 
 ### Web dashboard
 

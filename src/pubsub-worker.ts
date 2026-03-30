@@ -1,6 +1,6 @@
 import type { GmailClient } from "./gmail-client.js";
 import type { ClassifierPort } from "./classifier.port.js";
-import type { DatabasePort } from "./db.port.js";
+import type { Database, LogStore } from "./db.port.js";
 import type { AccountManager } from "./account-manager.js";
 import type { EventLogger } from "./event-logger.js";
 import { DEFAULT_CLASSIFICATION } from "./models.js";
@@ -42,7 +42,8 @@ export class NotificationQueue {
 export class PubSubWorker {
   private accountManager: AccountManager;
   private classifier: ClassifierPort;
-  private db: DatabasePort;
+  private db: Database;
+  private log: LogStore;
   private logger: EventLogger;
   private labelMap: Record<string, string>;
   private maxMessagesPerBatch: number;
@@ -53,7 +54,8 @@ export class PubSubWorker {
   constructor(
     accountManager: AccountManager,
     classifier: ClassifierPort,
-    db: DatabasePort,
+    db: Database,
+    log: LogStore,
     logger: EventLogger,
     labelConfig: PubSubWorkerConfig,
     onClassified?: (label: string) => void
@@ -61,6 +63,7 @@ export class PubSubWorker {
     this.accountManager = accountManager;
     this.classifier = classifier;
     this.db = db;
+    this.log = log;
     this.logger = logger;
     this.labelMap = {
       phish: labelConfig.quarantineLabelName,
@@ -71,7 +74,7 @@ export class PubSubWorker {
   }
 
   async processMessage(messageId: string, gmail: GmailClient, accountEmail: string): Promise<string | null> {
-    if (await this.db.isProcessed(messageId)) {
+    if (await this.log.isProcessed(messageId)) {
       await this.logger.log({ messageId, accountEmail, stage: "message_skipped", level: "info", message: "Already processed (dedup)" });
       return null;
     }
@@ -109,7 +112,7 @@ export class PubSubWorker {
       await this.logger.log({ messageId, accountEmail, stage: "labeled", level: "info", message: `Labeled as ${labelName} and removed from inbox` });
     }
 
-    const inserted = await this.db.saveClassification({
+    const inserted = await this.log.saveClassification({
       messageId: email.messageId,
       sender: email.sender,
       subject: email.subject,

@@ -42,11 +42,13 @@ function makeMocks() {
       }),
     },
     db: {
-      isProcessed: vi.fn().mockResolvedValue(false),
-      saveClassification: vi.fn().mockResolvedValue(true),
       getAccountHistoryId: vi.fn().mockResolvedValue("50"),
       updateAccountHistoryId: vi.fn().mockResolvedValue(undefined),
       incrementAccountStats: vi.fn().mockResolvedValue(undefined),
+    },
+    log: {
+      isProcessed: vi.fn().mockResolvedValue(false),
+      saveClassification: vi.fn().mockResolvedValue(true),
       logEvent: vi.fn().mockResolvedValue(undefined),
     },
     logger: {
@@ -86,6 +88,7 @@ describe("PubSubWorker.processMessage", () => {
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
+      mocks.log as any,
       mocks.logger as any,
       labelConfig
     );
@@ -96,12 +99,12 @@ describe("PubSubWorker.processMessage", () => {
     expect(result).toBe("100"); // historyId from makeRawMessage
     expect(mocks.gmail.getMessage).toHaveBeenCalledWith("msg1");
     expect(mocks.classifier.classify).toHaveBeenCalledOnce();
-    expect(mocks.db.saveClassification).toHaveBeenCalledOnce();
+    expect(mocks.log.saveClassification).toHaveBeenCalledOnce();
     expect(mocks.db.incrementAccountStats).toHaveBeenCalledWith("user@gmail.com", "benign");
   });
 
   it("returns null for dedup-skipped messages", async () => {
-    mocks.db.isProcessed.mockResolvedValue(true);
+    mocks.log.isProcessed.mockResolvedValue(true);
     const result = await worker.processMessage("msg1", mocks.gmail as any);
     expect(result).toBeNull();
     expect(mocks.gmail.getMessage).not.toHaveBeenCalled();
@@ -147,6 +150,7 @@ describe("PubSubWorker account loop", () => {
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
+      mocks.log as any,
       mocks.logger as any,
       labelConfig
     );
@@ -172,6 +176,7 @@ describe("PubSubWorker account loop", () => {
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
+      mocks.log as any,
       mocks.logger as any,
       labelConfig
     );
@@ -195,6 +200,7 @@ describe("PubSubWorker account loop", () => {
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
+      mocks.log as any,
       mocks.logger as any,
       labelConfig
     );
@@ -219,6 +225,7 @@ describe("PubSubWorker account loop", () => {
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
+      mocks.log as any,
       mocks.logger as any,
       labelConfig
     );
@@ -229,7 +236,7 @@ describe("PubSubWorker account loop", () => {
 
     expect(mocks.db.getAccountHistoryId).toHaveBeenCalledWith("user@gmail.com");
     expect(mocks.gmail.getHistory).toHaveBeenCalledWith("50", 5);
-    expect(mocks.db.saveClassification).toHaveBeenCalledOnce();
+    expect(mocks.log.saveClassification).toHaveBeenCalledOnce();
 
     worker.stop();
   });
@@ -255,6 +262,7 @@ describe("PubSubWorker account loop", () => {
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
+      mocks.log as any,
       mocks.logger as any,
       labelConfig
     );
@@ -296,6 +304,7 @@ describe("PubSubWorker account loop", () => {
         mocks.accountManager as any,
         mocks.classifier as any,
         mocks.db as any,
+        mocks.log as any,
         mocks.logger as any,
         labelConfig
       );

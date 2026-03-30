@@ -1,15 +1,15 @@
 import { GmailClient, type GmailClientConfig } from "./gmail-client.js";
 import { CredentialManager } from "./credentials.js";
-import type { DatabasePort } from "./db.port.js";
+import type { Database } from "./db.port.js";
 
 export class AccountManager {
   private clients = new Map<string, GmailClient>();
-  private db: DatabasePort;
+  private db: Database;
   private gmailConfig: GmailClientConfig;
   private oauthConfig: { clientId: string; clientSecret: string };
 
   constructor(
-    db: DatabasePort,
+    db: Database,
     gmailConfig: GmailClientConfig,
     oauthConfig: { clientId: string; clientSecret: string },
   ) {

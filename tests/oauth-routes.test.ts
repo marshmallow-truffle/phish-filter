@@ -73,7 +73,7 @@ const oauthConfig = {
 };
 
 function makeApp(am = mockAccountManager(), db = mockDb()) {
-  return createOAuthRoutes(am, db, new ServiceHealth(), oauthConfig);
+  return createOAuthRoutes(am, db, db, new ServiceHealth(), oauthConfig);
 }
 
 describe("OAuth routes", () => {
@@ -104,7 +104,7 @@ describe("OAuth routes", () => {
   it("GET /oauth/callback exchanges code and registers account", async () => {
     const am = mockAccountManager();
     const db = mockDb();
-    const app = createOAuthRoutes(am, db, new ServiceHealth(), oauthConfig);
+    const app = createOAuthRoutes(am, db, db, new ServiceHealth(), oauthConfig);
 
     const res = await app.request("/oauth/callback?code=test-auth-code");
     expect(res.status).toBe(302);
@@ -120,7 +120,7 @@ describe("OAuth routes", () => {
   it("POST /accounts/:email/remove deletes and redirects", async () => {
     const am = mockAccountManager();
     const db = mockDb();
-    const app = createOAuthRoutes(am, db, new ServiceHealth(), oauthConfig);
+    const app = createOAuthRoutes(am, db, db, new ServiceHealth(), oauthConfig);
 
     const res = await app.request("/accounts/existing%40gmail.com/remove", { method: "POST" });
     expect(res.status).toBe(302);
@@ -130,7 +130,7 @@ describe("OAuth routes", () => {
 
   it("POST /rules/add saves rule and redirects", async () => {
     const db = mockDb();
-    const app = createOAuthRoutes(mockAccountManager(), db, new ServiceHealth(), oauthConfig);
+    const app = createOAuthRoutes(mockAccountManager(), db, db, new ServiceHealth(), oauthConfig);
 
     const form = new FormData();
     form.set("field", "sender_domain");
@@ -152,7 +152,7 @@ describe("OAuth routes", () => {
 
   it("POST /rules/:id/remove deletes rule and redirects", async () => {
     const db = mockDb();
-    const app = createOAuthRoutes(mockAccountManager(), db, new ServiceHealth(), oauthConfig);
+    const app = createOAuthRoutes(mockAccountManager(), db, db, new ServiceHealth(), oauthConfig);
 
     const res = await app.request("/rules/r1/remove", { method: "POST" });
     expect(res.status).toBe(302);
@@ -161,7 +161,7 @@ describe("OAuth routes", () => {
 
   it("GET /events?message_id=... shows event trace", async () => {
     const db = mockDb();
-    const app = createOAuthRoutes(mockAccountManager(), db, new ServiceHealth(), oauthConfig);
+    const app = createOAuthRoutes(mockAccountManager(), db, db, new ServiceHealth(), oauthConfig);
 
     const res = await app.request("/events?message_id=msg1");
     expect(res.status).toBe(200);
