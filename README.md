@@ -129,59 +129,85 @@ Templates: `paypal` (phishing), `bank` (phishing), `benign` (GitHub notification
 ### Prerequisites
 
 - Node.js 22+
-- A GCP project with Gmail API and Pub/Sub API enabled
-- A PostgreSQL database (e.g., [Neon](https://neon.tech) free tier)
+- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) (`gcloud` CLI)
+- PostgreSQL (local or hosted)
 - An [Anthropic API key](https://console.anthropic.com/)
 
-### 1. GCP project and Gmail OAuth2
+### 1. GCP project
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com), create or select a project.
 2. Enable **Gmail API** and **Cloud Pub/Sub API** under APIs & Services.
-3. Under **Credentials**, create an **OAuth 2.0 Client ID** (type: Web application).
-   - Add `http://localhost:3000/oauth/callback` as an authorized redirect URI.
-4. Note the **Client ID** and **Client Secret**.
-5. Obtain a refresh token using the [OAuth 2.0 Playground](https://developers.google.com/oauthplayground/):
-   - Click the gear icon, check "Use your own OAuth credentials", and enter your Client ID/Secret.
-   - In Step 1, authorize the scopes: `https://www.googleapis.com/auth/gmail.readonly`, `https://www.googleapis.com/auth/gmail.modify`, `https://www.googleapis.com/auth/gmail.labels`.
-   - In Step 2, exchange the authorization code for a **refresh token**.
 
-### 2. GCP Pub/Sub
+### 2. OAuth consent screen
+
+1. Go to **APIs & Services → OAuth consent screen**.
+2. Choose **External** user type.
+3. Fill in app name and email.
+4. Add scopes: `gmail.readonly`, `gmail.modify`, `gmail.labels`.
+5. Under **Test users**, add the Gmail addresses you want to monitor.
+
+### 3. OAuth credentials
+
+1. Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
+2. Application type: **Web application**.
+3. Add `http://localhost:8080/oauth/callback` as an **Authorized redirect URI**.
+4. Note the **Client ID** and **Client Secret**.
+
+### 4. GCP Pub/Sub
 
 ```bash
 export GCP_PROJECT_ID=your-project-id
 ./scripts/setup-pubsub.sh
 ```
 
-This creates the `email-notifications` topic, grants `gmail-api-push@system.gserviceaccount.com` publish rights, and creates the `email-worker-sub` pull subscription with a 60s ack deadline and 7-day message retention.
+This creates the `email-notifications` topic, grants Gmail publish rights, and creates the `email-worker-sub` pull subscription.
 
-### 3. PostgreSQL
+### 5. GCP Application Default Credentials
 
-Create a database on [Neon](https://neon.tech) (free tier) or any Postgres provider. The service applies the schema automatically on startup from `schema.sql`.
+The Pub/Sub pull client needs ADC to authenticate:
 
-### 4. Environment variables
+```bash
+gcloud auth application-default login
+```
 
-Create a `.env` file (gitignored) or export directly:
+This opens a browser for you to sign in with your Google account.
+
+### 6. PostgreSQL
+
+**Local:**
+```bash
+createdb phish_filter
+```
+
+**Hosted:** Create a database on [Neon](https://neon.tech) (free tier) or any Postgres provider.
+
+The service applies the schema automatically on startup.
+
+### 7. Environment variables
+
+Create a `.env` file (gitignored):
 
 ```bash
 # Required
-DATABASE_URL=postgresql://user:pass@host/db
+DATABASE_URL=postgresql://localhost/phish_filter
 GOOGLE_CLIENT_ID=your-oauth-client-id
 GOOGLE_CLIENT_SECRET=your-oauth-client-secret
-GOOGLE_REFRESH_TOKEN=your-refresh-token
 GCP_PROJECT_ID=your-gcp-project-id
 ANTHROPIC_API_KEY=sk-ant-...
 
 # Optional (shown with defaults)
+GOOGLE_REFRESH_TOKEN=                  # not needed — add accounts via web UI instead
 PUBSUB_TOPIC=email-notifications
 PUBSUB_SUBSCRIPTION=email-worker-sub
 LLM_MODEL=claude-sonnet-4-20250514
 LLM_MAX_CONCURRENT=5
 QUARANTINE_LABEL_NAME=PHISH_QUARANTINE
 MAX_BODY_LENGTH=2000
+OAUTH_REDIRECT_URI=http://localhost:8080/oauth/callback
 PORT=8080
 ```
 
-### 5. Run locally
+### 8. Run
 
 ```bash
 npm install
@@ -189,7 +215,7 @@ npm run check   # typecheck + lint + test
 npm run dev     # starts with hot reload via tsx
 ```
 
-The service will connect to Postgres, apply the schema, set up the Gmail watch, catch up on any missed messages, and begin pulling from Pub/Sub.
+Then visit **http://localhost:8080/** to add Gmail accounts via the web UI.
 
 ## Deploy
 
@@ -206,9 +232,9 @@ fly secrets set \
   DATABASE_URL="postgresql://user:pass@host/db" \
   GOOGLE_CLIENT_ID="..." \
   GOOGLE_CLIENT_SECRET="..." \
-  GOOGLE_REFRESH_TOKEN="..." \
   GCP_PROJECT_ID="..." \
-  ANTHROPIC_API_KEY="..."
+  ANTHROPIC_API_KEY="..." \
+  OAUTH_REDIRECT_URI="https://your-app.fly.dev/oauth/callback"
 
 # Deploy
 fly deploy
@@ -220,11 +246,7 @@ The included `fly.toml` configures:
 - `auto_stop_machines = false` so the service stays alive for Pub/Sub pull
 - `min_machines_running = 1`
 
-After deploy, verify at:
-```
-https://email-classifier.fly.dev/health
-https://email-classifier.fly.dev/health/classifications
-```
+After deploy, verify at `https://your-app.fly.dev/`.
 
 ### Docker (any host)
 
