@@ -64,7 +64,7 @@ describe("Pipeline end-to-end", () => {
       mocks.classifier as any,
       mocks.db as any,
       mocks.logger as any,
-      { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED" }
+      { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED", maxMessagesPerBatch: 5 }
     );
 
     const historyId = await worker.processMessage("msg1", mocks.gmail as any);
@@ -92,7 +92,7 @@ describe("Pipeline end-to-end", () => {
       mocks.classifier as any,
       mocks.db as any,
       mocks.logger as any,
-      { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED" }
+      { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED", maxMessagesPerBatch: 5 }
     );
 
     const result = await worker.processMessage("msg1", mocks.gmail as any);
@@ -112,7 +112,7 @@ describe("Pipeline end-to-end", () => {
       mocks.classifier as any,
       mocks.db as any,
       mocks.logger as any,
-      { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED" }
+      { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED", maxMessagesPerBatch: 5 }
     );
 
     await worker.processMessage("msg1", mocks.gmail as any);

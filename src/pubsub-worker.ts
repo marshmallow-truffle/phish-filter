@@ -9,6 +9,7 @@ import { withRetry } from "./retry.js";
 export interface PubSubWorkerConfig {
   quarantineLabelName: string;
   spamLabelName: string;
+  maxMessagesPerBatch: number;
 }
 
 interface QueueItem {
@@ -44,6 +45,7 @@ export class PubSubWorker {
   private db: DatabasePort;
   private logger: EventLogger;
   private labelMap: Record<string, string>;
+  private maxMessagesPerBatch: number;
   private running = true;
   private queues = new Map<string, NotificationQueue>();
   private onClassified?: (label: string) => void;
@@ -64,6 +66,7 @@ export class PubSubWorker {
       phish: labelConfig.quarantineLabelName,
       spam: labelConfig.spamLabelName,
     };
+    this.maxMessagesPerBatch = labelConfig.maxMessagesPerBatch;
     this.onClassified = onClassified;
   }
 
@@ -154,7 +157,7 @@ export class PubSubWorker {
         }
 
         const cursor = await this.db.getAccountHistoryId(emailAddress);
-        const messageIds = await gmail.getHistory(cursor);
+        const messageIds = await gmail.getHistory(cursor, this.maxMessagesPerBatch);
 
         let maxHistoryId: string | null = null;
         for (const msgId of messageIds) {

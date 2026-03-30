@@ -128,6 +128,7 @@ async function main() {
   const worker = new PubSubWorker(accountManager, classifier, db, logger, {
     quarantineLabelName: config.QUARANTINE_LABEL_NAME,
     spamLabelName: config.SPAM_LABEL_NAME,
+    maxMessagesPerBatch: config.MAX_MESSAGES_PER_BATCH,
   }, (label) => health.record(label));
 
   // 7. Trigger catch-up for all registered accounts

@@ -140,27 +140,19 @@ export class GmailClient {
     return result;
   }
 
-  async getHistory(startHistoryId: string): Promise<string[]> {
+  async getHistory(startHistoryId: string, maxResults = 5): Promise<string[]> {
+    const res = await this.service.users.history.list({
+      userId: "me",
+      startHistoryId,
+      historyTypes: ["messageAdded"],
+      maxResults,
+    });
     const messageIds: string[] = [];
-    let pageToken: string | undefined;
-
-    do {
-      const res = await this.service.users.history.list({
-        userId: "me",
-        startHistoryId, // pass as string, never cast to number
-        historyTypes: ["messageAdded"],
-        pageToken,
-      });
-      for (const record of res.data.history ?? []) {
-        for (const msg of record.messagesAdded ?? []) {
-          if (msg.message?.id) {
-            messageIds.push(msg.message.id);
-          }
-        }
+    for (const record of res.data.history ?? []) {
+      for (const msg of record.messagesAdded ?? []) {
+        if (msg.message?.id) messageIds.push(msg.message.id);
       }
-      pageToken = res.data.nextPageToken ?? undefined;
-    } while (pageToken);
-
+    }
     return messageIds;
   }
 

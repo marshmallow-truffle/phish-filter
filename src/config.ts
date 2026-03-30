@@ -15,6 +15,7 @@ const ConfigSchema = z.object({
   QUARANTINE_LABEL_NAME: z.string().default("PHISH_QUARANTINE"),
   SPAM_LABEL_NAME: z.string().default("SPAM_DETECTED"),
   MAX_BODY_LENGTH: z.coerce.number().default(2000),
+  MAX_MESSAGES_PER_BATCH: z.coerce.number().default(5),
   OAUTH_REDIRECT_URI: z.string().default("http://localhost:8080/oauth/callback"),
   PORT: z.coerce.number().default(8080),
 });

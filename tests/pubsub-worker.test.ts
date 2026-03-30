@@ -55,7 +55,7 @@ function makeMocks() {
   };
 }
 
-const labelConfig = { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED" };
+const labelConfig = { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED", maxMessagesPerBatch: 5 };
 
 describe("NotificationQueue", () => {
   it("push then take returns immediately", async () => {
@@ -228,7 +228,7 @@ describe("PubSubWorker account loop", () => {
     await new Promise((r) => setTimeout(r, 100));
 
     expect(mocks.db.getAccountHistoryId).toHaveBeenCalledWith("user@gmail.com");
-    expect(mocks.gmail.getHistory).toHaveBeenCalledWith("50");
+    expect(mocks.gmail.getHistory).toHaveBeenCalledWith("50", 5);
     expect(mocks.db.saveClassification).toHaveBeenCalledOnce();
 
     worker.stop();
