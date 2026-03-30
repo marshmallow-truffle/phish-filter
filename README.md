@@ -29,19 +29,40 @@ Real-time email classification service that watches a Gmail inbox, classifies in
 
 Event-driven, fault-tolerant, zero data loss during downtime. Gmail pushes change notifications to a Pub/Sub topic; the service pulls from a subscription at its own pace, giving natural backpressure control.
 
-### Fault tolerance: history catch-up
+### Reliability: every email gets processed
 
-The core reliability mechanism. On every startup (including crash recovery), the service:
+Three mechanisms work together to guarantee no email is missed, even across crashes and restarts:
 
-1. Reads `last_history_id` from Postgres (the recovery cursor)
-2. Starts the Pub/Sub pull subscription (buffers messages during replay)
-3. Calls `history.list(startHistoryId=last_history_id)` to fetch every message added since the last known state
-4. Processes each message through the full pipeline (dedup check, fetch, classify, store)
-5. Re-establishes `watch()` to renew Pub/Sub notifications
+**1. Per-account serial queue.** Each Gmail account gets its own notification queue with a single processing loop. Pub/Sub notifications are enqueued immediately (non-blocking) and processed one at a time per account. This eliminates race conditions — the read cursor → fetch messages → process → update cursor sequence is atomic per account, while different accounts process concurrently.
 
-The `classifications` table has a `UNIQUE(message_id)` constraint with `ON CONFLICT DO NOTHING`, so overlapping messages from catch-up and live Pub/Sub are handled idempotently.
+**2. History cursor tracks processed messages, not notifications.** After processing a batch of messages, the cursor advances to the highest `historyId` of successfully processed messages — not the notification's historyId. If the server crashes mid-batch, the cursor reflects only what was actually completed. On restart, `history.list(cursor)` picks up from exactly where processing stopped.
 
-This means the service can be down for hours and on restart will process every missed email without duplication.
+**3. Catch-up on startup uses the same code path.** On startup, each account receives a synthetic notification pushed to its queue. The same loop calls `history.list(last_cursor)`, processes any missed messages, and advances the cursor. There is no separate catch-up code — live processing and crash recovery are identical.
+
+**Dedup guarantees idempotency.** The `classifications` table has a `UNIQUE(message_id)` primary key with `ON CONFLICT DO NOTHING`. If a message is re-fetched (due to overlapping history ranges or Pub/Sub redelivery), it's silently skipped. The cursor only advances past it.
+
+**Pub/Sub ack/nack.** Notifications are only acknowledged after the full batch succeeds. If processing throws, the notification is nacked and Pub/Sub redelivers it after the ack deadline (60s). The dedup check skips any messages that were already processed before the failure.
+
+```
+Startup:
+  for each account → push synthetic notification to queue
+
+Live:
+  Pub/Sub notification → enqueue(emailAddress, ack, nack)
+
+Per-account loop (serial):
+  take notification from queue
+  read cursor from DB
+  history.list(cursor) → message IDs
+  for each message:
+    dedup check → skip if already in DB
+    fetch from Gmail → classify → label → save to DB
+    track max historyId
+  update cursor to max historyId
+  ack notification
+```
+
+The service can be down for hours. On restart, every missed email is processed without duplication.
 
 ### Database isolation
 
