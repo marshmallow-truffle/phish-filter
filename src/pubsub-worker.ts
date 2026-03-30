@@ -73,7 +73,7 @@ export class PubSubWorker {
       await this.logger.log({ messageId, accountEmail, stage: "quarantined", level: "info", message: "Moved to PHISH_QUARANTINE label" });
       quarantined = true;
     } else if (result.label === "spam") {
-      await gmail.labelMessage(messageId, this.spamLabelName, false);
+      await gmail.labelMessage(messageId, this.spamLabelName);
       await this.logger.log({ messageId, accountEmail, stage: "labeled_spam", level: "info", message: "Labeled as SPAM_DETECTED" });
     }
 
