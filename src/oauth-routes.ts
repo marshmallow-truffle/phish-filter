@@ -99,9 +99,26 @@ export function createOAuthRoutes(
     const profile = await gmail.users.getProfile({ userId: "me" });
     const email = profile.data.emailAddress!;
 
-    // Persist and hot-register
+    // Persist token first (so it survives even if register fails)
     await db.upsertAccount(email, tokens.refresh_token);
-    await accountManager.register(email, tokens.refresh_token);
+
+    // Hot-register: set up label, watch, catch up
+    try {
+      await accountManager.register(email, tokens.refresh_token);
+    } catch (err) {
+      console.error(`Account ${email} saved but registration failed:`, err);
+      // Account is persisted — will retry on next server restart
+      return c.html(`<!DOCTYPE html>
+<html><body>
+  <h1>Account saved, but setup incomplete</h1>
+  <p>Account <strong>${email}</strong> was saved. However, Gmail watch setup failed:</p>
+  <pre>${err instanceof Error ? err.message : String(err)}</pre>
+  <p>This usually means the Pub/Sub topic hasn't been created yet. Run:</p>
+  <pre>./scripts/setup-pubsub.sh</pre>
+  <p>Then restart the server — the account will be registered automatically.</p>
+  <p><a href="/">Back to dashboard</a></p>
+</body></html>`, 200);
+    }
 
     return c.redirect("/");
   });

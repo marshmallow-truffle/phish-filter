@@ -32,16 +32,18 @@ export class AccountManager {
     const watchResult = await gmail.watch();
     console.log(`Registered account ${email}, watch until ${watchResult.expiration}`);
 
-    // Catch up on missed messages for this account
+    // Catch up on missed messages since last known history ID
     const lastHistoryId = await this.db.getAccountHistoryId(email);
-    const messageIds = await gmail.getHistory(lastHistoryId);
-    console.log(`Catching up ${email}: ${messageIds.length} messages since history ${lastHistoryId}`);
-    // Note: actual message processing happens in PubSubWorker.processMessage —
-    // here we just store the client. The worker will process these during its first notification
-    // or they'll be picked up by the history.list call in processNotification.
-
-    if (messageIds.length > 0) {
+    if (lastHistoryId === "0") {
+      // Fresh account — no history to replay. Use current historyId as baseline.
       await this.db.updateAccountHistoryId(email, watchResult.historyId);
+      console.log(`Fresh account ${email}, baseline history ${watchResult.historyId}`);
+    } else {
+      const messageIds = await gmail.getHistory(lastHistoryId);
+      console.log(`Catching up ${email}: ${messageIds.length} messages since history ${lastHistoryId}`);
+      if (messageIds.length > 0) {
+        await this.db.updateAccountHistoryId(email, watchResult.historyId);
+      }
     }
 
     this.clients.set(email, gmail);
