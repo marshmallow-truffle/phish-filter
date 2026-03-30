@@ -124,6 +124,29 @@ describe("PgDatabase", () => {
     expect(params[0]).toBe("a@b.com");
   });
 
+  it("logEvent inserts with auto-incrementing seq", async () => {
+    pool.query.mockResolvedValueOnce({ rows: [] });
+    await db.logEvent({ messageId: "msg1", stage: "classified", level: "info", message: "benign" });
+    const [sql, params] = pool.query.mock.calls[0];
+    expect(sql).toContain("INSERT INTO events");
+    expect(sql).toContain("COALESCE");
+    expect(params[0]).toBe("msg1");
+  });
+
+  it("getEvents returns rows ordered by seq", async () => {
+    pool.query.mockResolvedValueOnce({
+      rows: [
+        { message_id: "msg1", seq: 1, stage: "fetched", level: "info", message: "ok", metadata: null, created_at: "2026-03-29T10:00:00Z", account_email: null },
+      ],
+    });
+    const events = await db.getEvents("msg1");
+    expect(events).toHaveLength(1);
+    expect(events[0].stage).toBe("fetched");
+    const [sql, params] = pool.query.mock.calls[0];
+    expect(sql).toContain("ORDER BY seq");
+    expect(params[0]).toBe("msg1");
+  });
+
   it("implements DatabasePort interface", () => {
     const port: DatabasePort = db;
     expect(port.isProcessed).toBeTypeOf("function");
@@ -141,6 +164,9 @@ describe("PgDatabase", () => {
     expect(port.updateAccountHistoryId).toBeTypeOf("function");
     expect(port.removeAccount).toBeTypeOf("function");
     expect(port.incrementAccountStats).toBeTypeOf("function");
+    expect(port.logEvent).toBeTypeOf("function");
+    expect(port.getEvents).toBeTypeOf("function");
+    expect(port.getRecentEvents).toBeTypeOf("function");
     expect(port.close).toBeTypeOf("function");
   });
 });

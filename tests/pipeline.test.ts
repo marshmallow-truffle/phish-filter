@@ -45,7 +45,10 @@ function makeMocks(classifyResult: { label: string; confidence: number; reason: 
     db: {
       isProcessed: vi.fn().mockResolvedValue(false),
       saveClassification: vi.fn().mockResolvedValue(true),
+      incrementAccountStats: vi.fn().mockResolvedValue(undefined),
+      logEvent: vi.fn().mockResolvedValue(undefined),
     },
+    logger: { log: vi.fn().mockResolvedValue(undefined) },
   };
 }
 
@@ -59,7 +62,8 @@ describe("Pipeline end-to-end", () => {
     const worker = new PubSubWorker(
       mocks.accountManager as any,
       mocks.classifier as any,
-      mocks.db as any
+      mocks.db as any,
+      mocks.logger as any
     );
 
     const result = await worker.processMessage("msg1", mocks.gmail as any);
@@ -85,7 +89,8 @@ describe("Pipeline end-to-end", () => {
     const worker = new PubSubWorker(
       mocks.accountManager as any,
       mocks.classifier as any,
-      mocks.db as any
+      mocks.db as any,
+      mocks.logger as any
     );
 
     const result = await worker.processMessage("msg1", mocks.gmail as any);
@@ -103,7 +108,8 @@ describe("Pipeline end-to-end", () => {
     const worker = new PubSubWorker(
       mocks.accountManager as any,
       mocks.classifier as any,
-      mocks.db as any
+      mocks.db as any,
+      mocks.logger as any
     );
 
     await worker.processMessage("msg1", mocks.gmail as any);

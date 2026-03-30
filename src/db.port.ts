@@ -62,5 +62,8 @@ export interface DatabasePort {
   updateAccountHistoryId(email: string, historyId: string): Promise<void>;
   removeAccount(email: string): Promise<void>;
   incrementAccountStats(email: string, label: string): Promise<void>;
+  logEvent(event: { messageId: string; accountEmail?: string; stage: string; level: string; message: string; metadata?: Record<string, any> }): Promise<void>;
+  getEvents(messageId: string): Promise<Array<{ message_id: string; seq: number; account_email: string | null; stage: string; level: string; message: string; metadata: any; created_at: string }>>;
+  getRecentEvents(limit?: number): Promise<Array<{ message_id: string; seq: number; account_email: string | null; stage: string; level: string; message: string; metadata: any; created_at: string }>>;
   close(): Promise<void>;
 }

@@ -47,6 +47,18 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS idx_classifications_account ON classifications(account_email);
 
+CREATE TABLE IF NOT EXISTS events (
+    message_id    TEXT NOT NULL,
+    seq           INT NOT NULL,
+    account_email TEXT,
+    stage         TEXT NOT NULL,
+    level         TEXT NOT NULL CHECK (level IN ('info', 'warn', 'error')),
+    message       TEXT NOT NULL,
+    metadata      JSONB,
+    created_at    TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (message_id, seq)
+);
+
 CREATE TABLE IF NOT EXISTS classification_rules (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     field       TEXT NOT NULL CHECK (field IN ('sender_domain', 'subject', 'body')),

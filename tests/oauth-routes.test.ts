@@ -47,7 +47,7 @@ function mockDb() {
       },
     ]),
     getRecentClassifications: vi.fn().mockResolvedValue([
-      { sender: "a@b.com", subject: "Hi", label: "benign", confidence: 0.9, reason: "Normal", quarantined: false, processed_at: "2026-03-29T10:00:00Z" },
+      { message_id: "msg1", sender: "a@b.com", subject: "Hi", label: "benign", confidence: 0.9, reason: "Normal", quarantined: false, processed_at: "2026-03-29T10:00:00Z" },
     ]),
     getRules: vi.fn().mockResolvedValue([
       { id: "r1", field: "sender_domain", pattern: "evil.com", label: "phish", confidence: 1.0, reason: "Blocklist" },
@@ -57,6 +57,12 @@ function mockDb() {
     removeAccount: vi.fn().mockResolvedValue(undefined),
     saveRule: vi.fn().mockResolvedValue(undefined),
     removeRule: vi.fn().mockResolvedValue(undefined),
+    getRecentEvents: vi.fn().mockResolvedValue([
+      { message_id: "msg1", seq: 1, account_email: null, stage: "classified", level: "info", message: "benign", metadata: null, created_at: "2026-03-29T10:00:00Z" },
+    ]),
+    getEvents: vi.fn().mockResolvedValue([
+      { message_id: "msg1", seq: 1, account_email: null, stage: "message_fetched", level: "info", message: "Fetched", metadata: null, created_at: "2026-03-29T10:00:00Z" },
+    ]),
   } as any;
 }
 
@@ -151,5 +157,25 @@ describe("OAuth routes", () => {
     const res = await app.request("/rules/r1/remove", { method: "POST" });
     expect(res.status).toBe(302);
     expect(db.removeRule).toHaveBeenCalledWith("r1");
+  });
+
+  it("GET /events?message_id=... shows event trace", async () => {
+    const db = mockDb();
+    const app = createOAuthRoutes(mockAccountManager(), db, new ServiceHealth(), oauthConfig);
+
+    const res = await app.request("/events?message_id=msg1");
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Events for msg1");
+    expect(html).toContain("message_fetched");
+    expect(db.getEvents).toHaveBeenCalledWith("msg1");
+  });
+
+  it("GET / shows recent events section", async () => {
+    const app = makeApp();
+    const res = await app.request("/");
+    const html = await res.text();
+    expect(html).toContain("Recent Events");
+    expect(html).toContain("classified");
   });
 });

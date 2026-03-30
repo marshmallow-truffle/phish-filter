@@ -169,6 +169,30 @@ export class PgDatabase implements DatabasePort {
     );
   }
 
+  async logEvent(event: { messageId: string; accountEmail?: string; stage: string; level: string; message: string; metadata?: Record<string, any> }): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO events (message_id, seq, account_email, stage, level, message, metadata)
+       VALUES ($1, COALESCE((SELECT MAX(seq) FROM events WHERE message_id = $1), 0) + 1, $2, $3, $4, $5, $6::jsonb)`,
+      [event.messageId, event.accountEmail ?? null, event.stage, event.level, event.message, event.metadata ? JSON.stringify(event.metadata) : null]
+    );
+  }
+
+  async getEvents(messageId: string) {
+    const res = await this.pool.query(
+      "SELECT message_id, seq, account_email, stage, level, message, metadata, created_at FROM events WHERE message_id = $1 ORDER BY seq",
+      [messageId]
+    );
+    return res.rows;
+  }
+
+  async getRecentEvents(limit = 50) {
+    const res = await this.pool.query(
+      "SELECT message_id, seq, account_email, stage, level, message, metadata, created_at FROM events ORDER BY created_at DESC LIMIT $1",
+      [limit]
+    );
+    return res.rows;
+  }
+
   async getRecentClassifications(limit = 20): Promise<ClassificationRow[]> {
     const res = await this.pool.query(
       `SELECT message_id, sender, subject, label, confidence, reason,

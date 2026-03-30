@@ -120,8 +120,10 @@ async function main() {
     }
   }
 
-  // 6. Create worker with account manager
-  const worker = new PubSubWorker(accountManager, classifier, db, (label) => health.record(label));
+  // 6. Create event logger and worker
+  const { EventLogger } = await import("./event-logger.js");
+  const logger = new EventLogger(db);
+  const worker = new PubSubWorker(accountManager, classifier, db, logger, (label) => health.record(label));
 
   // 7. Start Pub/Sub pull
   worker.pullLoop(config.PUBSUB_SUBSCRIPTION, config.GCP_PROJECT_ID).catch((err) => {

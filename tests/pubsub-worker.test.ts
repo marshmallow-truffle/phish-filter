@@ -48,6 +48,10 @@ function makeMocks() {
       getAccountHistoryId: vi.fn().mockResolvedValue("50"),
       updateAccountHistoryId: vi.fn().mockResolvedValue(undefined),
       incrementAccountStats: vi.fn().mockResolvedValue(undefined),
+      logEvent: vi.fn().mockResolvedValue(undefined),
+    },
+    logger: {
+      log: vi.fn().mockResolvedValue(undefined),
     },
   };
 }
@@ -61,7 +65,8 @@ describe("PubSubWorker", () => {
     worker = new PubSubWorker(
       mocks.accountManager as any,
       mocks.classifier as any,
-      mocks.db as any
+      mocks.db as any,
+      mocks.logger as any
     );
   });
 

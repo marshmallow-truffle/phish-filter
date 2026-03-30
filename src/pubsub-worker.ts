@@ -2,12 +2,14 @@ import type { GmailClient } from "./gmail-client.js";
 import type { ClassifierPort } from "./classifier.port.js";
 import type { DatabasePort } from "./db.port.js";
 import type { AccountManager } from "./account-manager.js";
+import type { EventLogger } from "./event-logger.js";
 import { DEFAULT_CLASSIFICATION } from "./models.js";
 
 export class PubSubWorker {
   private accountManager: AccountManager;
   private classifier: ClassifierPort;
   private db: DatabasePort;
+  private logger: EventLogger;
   private running = false;
   private onClassified?: (label: string) => void;
 
@@ -15,20 +17,25 @@ export class PubSubWorker {
     accountManager: AccountManager,
     classifier: ClassifierPort,
     db: DatabasePort,
+    logger: EventLogger,
     onClassified?: (label: string) => void
   ) {
     this.accountManager = accountManager;
     this.classifier = classifier;
     this.db = db;
+    this.logger = logger;
     this.onClassified = onClassified;
   }
 
   async processMessage(messageId: string, gmail: GmailClient, accountEmail?: string): Promise<boolean> {
     if (await this.db.isProcessed(messageId)) {
+      await this.logger.log({ messageId, accountEmail, stage: "message_skipped", level: "info", message: "Already processed (dedup)" });
       return false;
     }
 
     const email = await gmail.getMessage(messageId);
+    await this.logger.log({ messageId, accountEmail, stage: "message_fetched", level: "info", message: `From: ${email.sender}, Subject: ${email.subject}` });
+
     const result = await this.classifier.classify({
       sender: email.sender,
       subject: email.subject,
@@ -36,9 +43,12 @@ export class PubSubWorker {
       headers: email.rawHeaders,
     }) ?? DEFAULT_CLASSIFICATION;
 
+    await this.logger.log({ messageId, accountEmail, stage: "classified", level: "info", message: `${result.label} (${Math.round(result.confidence * 100)}%) — ${result.reason}`, metadata: { label: result.label, confidence: result.confidence, reason: result.reason } });
+
     let quarantined = false;
     if (result.label === "phish") {
       await gmail.quarantineMessage(messageId);
+      await this.logger.log({ messageId, accountEmail, stage: "quarantined", level: "info", message: "Moved to PHISH_QUARANTINE label" });
       quarantined = true;
     }
 
@@ -56,13 +66,12 @@ export class PubSubWorker {
       accountEmail,
     });
 
+    await this.logger.log({ messageId, accountEmail, stage: "saved", level: "info", message: "Classification persisted" });
+
     if (accountEmail) {
       await this.db.incrementAccountStats(accountEmail, result.label);
     }
     this.onClassified?.(result.label);
-    console.log(
-      `Classified ${messageId}: ${result.label} (${Math.round(result.confidence * 100)}%) — ${result.reason}`
-    );
     return true;
   }
 
@@ -70,13 +79,15 @@ export class PubSubWorker {
     const payload = JSON.parse(data.toString());
     const { emailAddress, historyId } = payload;
     if (!historyId || !emailAddress) {
-      console.warn("Pub/Sub message missing historyId or emailAddress:", payload);
+      await this.logger.log({ messageId: `notification-${Date.now()}`, stage: "notification_invalid", level: "warn", message: "Missing historyId or emailAddress", metadata: payload });
       return;
     }
 
+    await this.logger.log({ messageId: `history-${historyId}`, accountEmail: emailAddress, stage: "notification_received", level: "info", message: `historyId=${historyId}` });
+
     const gmail = this.accountManager.get(emailAddress);
     if (!gmail) {
-      console.warn(`No registered account for ${emailAddress}, ignoring`);
+      await this.logger.log({ messageId: `history-${historyId}`, accountEmail: emailAddress, stage: "account_not_found", level: "warn", message: `No registered account for ${emailAddress}` });
       return;
     }
 

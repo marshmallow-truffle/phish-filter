@@ -26,11 +26,12 @@ export function createOAuthRoutes(
   const app = new Hono();
 
   app.get("/", async (c) => {
-    const [accounts, classifications, rules, dbHealth] = await Promise.all([
+    const [accounts, classifications, rules, dbHealth, recentEvents] = await Promise.all([
       db.getAccounts(),
       db.getRecentClassifications(20),
       db.getRules(),
       db.checkHealth().catch(() => null),
+      db.getRecentEvents(50),
     ]);
 
     const accountRows = accounts
@@ -48,6 +49,7 @@ export function createOAuthRoutes(
 
     const classificationRows = classifications
       .map((cl) => `<tr>
+        <td><a href="/events?message_id=${encodeURIComponent(cl.message_id)}">${cl.message_id}</a></td>
         <td>${cl.sender}</td>
         <td>${cl.subject}</td>
         <td class="label-${cl.label}">${cl.label}</td>
@@ -55,6 +57,17 @@ export function createOAuthRoutes(
         <td>${cl.reason}</td>
         <td>${cl.quarantined ? "Yes" : ""}</td>
         <td>${new Date(cl.processed_at).toLocaleString()}</td>
+      </tr>`)
+      .join("\n");
+
+    const eventRows = recentEvents
+      .map((e) => `<tr>
+        <td><a href="/events?message_id=${encodeURIComponent(e.message_id)}">${e.message_id}</a></td>
+        <td>${e.seq}</td>
+        <td class="level-${e.level}">${e.level}</td>
+        <td>${e.stage}</td>
+        <td>${e.message}</td>
+        <td>${new Date(e.created_at).toLocaleString()}</td>
       </tr>`)
       .join("\n");
 
@@ -85,6 +98,8 @@ export function createOAuthRoutes(
   .label-phish { color: #d93025; font-weight: bold; }
   .label-spam { color: #e37400; font-weight: bold; }
   .label-benign { color: #188038; }
+  .level-warn { color: #e37400; }
+  .level-error { color: #d93025; font-weight: bold; }
   .status { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 13px; }
   .status-healthy { background: #e6f4ea; color: #188038; }
   .status-degraded { background: #fce8e6; color: #d93025; }
@@ -141,10 +156,66 @@ export function createOAuthRoutes(
   <h2>Recent Classifications</h2>
   ${classifications.length > 0
     ? `<table>
-        <tr><th>Sender</th><th>Subject</th><th>Label</th><th>Confidence</th><th>Reason</th><th>Quarantined</th><th>Time</th></tr>
+        <tr><th>Message ID</th><th>Sender</th><th>Subject</th><th>Label</th><th>Confidence</th><th>Reason</th><th>Quarantined</th><th>Time</th></tr>
         ${classificationRows}
       </table>`
     : "<p>No emails classified yet.</p>"}
+
+  <h2>Event Lookup</h2>
+  <form method="GET" action="/events" class="add-rule">
+    <input name="message_id" placeholder="Message ID" required size="30">
+    <button type="submit" class="btn">Lookup</button>
+  </form>
+
+  <h2>Recent Events</h2>
+  ${recentEvents.length > 0
+    ? `<table>
+        <tr><th>Message ID</th><th>#</th><th>Level</th><th>Stage</th><th>Message</th><th>Time</th></tr>
+        ${eventRows}
+      </table>`
+    : "<p>No events yet.</p>"}
+</body>
+</html>`);
+  });
+
+  app.get("/events", async (c) => {
+    const messageId = c.req.query("message_id");
+    if (!messageId) return c.redirect("/");
+    const events = await db.getEvents(messageId);
+    const rows = events
+      .map((e) => `<tr>
+        <td>${e.seq}</td>
+        <td class="level-${e.level}">${e.level}</td>
+        <td>${e.stage}</td>
+        <td>${e.message}</td>
+        <td>${e.metadata ? `<code>${JSON.stringify(e.metadata)}</code>` : ""}</td>
+        <td>${new Date(e.created_at).toLocaleString()}</td>
+      </tr>`)
+      .join("\n");
+
+    return c.html(`<!DOCTYPE html>
+<html>
+<head><title>Events: ${messageId}</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 40px auto; padding: 0 20px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 20px; }
+  th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; font-size: 14px; }
+  th { background: #f5f5f5; }
+  .level-warn { color: #e37400; }
+  .level-error { color: #d93025; font-weight: bold; }
+  code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+  a { color: #4285f4; }
+</style>
+</head>
+<body>
+  <h1>Events for ${messageId}</h1>
+  <p><a href="/">Back to dashboard</a></p>
+  ${events.length > 0
+    ? `<table>
+        <tr><th>#</th><th>Level</th><th>Stage</th><th>Message</th><th>Metadata</th><th>Time</th></tr>
+        ${rows}
+      </table>`
+    : "<p>No events found for this message ID.</p>"}
 </body>
 </html>`);
   });
