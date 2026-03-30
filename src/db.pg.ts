@@ -38,22 +38,17 @@ export class PgDatabase implements DatabasePort {
   async saveClassification(record: SaveClassificationInput): Promise<boolean> {
     const res = await this.pool.query(
       `INSERT INTO classifications
-         (message_id, history_id, sender, subject, body_sent_to_llm,
-          label, confidence, reason, quarantined, raw_headers, account_email)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)
+         (message_id, sender, subject, label, confidence, reason, quarantined)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (message_id) DO NOTHING`,
       [
         record.messageId,
-        record.historyId,
         record.sender,
         record.subject,
-        record.bodySentToLlm,
         record.label,
         record.confidence,
         record.reason,
         record.quarantined,
-        JSON.stringify(record.rawHeaders),
-        record.accountEmail ?? null,
       ]
     );
     return (res.rowCount ?? 0) > 0;

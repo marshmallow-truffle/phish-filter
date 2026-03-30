@@ -14,16 +14,12 @@ export interface Account {
 
 export interface SaveClassificationInput {
   messageId: string;
-  historyId: string | null;
   sender: string;
   subject: string;
-  bodySentToLlm: string;
   label: string;
   confidence: number;
   reason: string;
   quarantined: boolean;
-  rawHeaders: Record<string, string>;
-  accountEmail?: string;
 }
 
 export interface HealthStats {

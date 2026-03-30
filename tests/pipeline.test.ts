@@ -76,7 +76,7 @@ describe("Pipeline end-to-end", () => {
     expect(mocks.db.saveClassification).toHaveBeenCalledOnce();
 
     const saveCall = mocks.db.saveClassification.mock.calls[0][0];
-    expect(saveCall.bodySentToLlm).toContain("evil.ru/steal");
+    expect(saveCall.label).toBe("phish");
     expect(saveCall.quarantined).toBe(true);
   });
 

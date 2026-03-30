@@ -34,15 +34,3 @@ export interface ClassificationRule {
   enabled: boolean;
 }
 
-export interface ClassificationRecord {
-  messageId: string;
-  historyId: string | null;
-  sender: string;
-  subject: string;
-  bodySentToLlm: string;
-  label: string;
-  confidence: number;
-  reason: string;
-  quarantined: boolean;
-  processedAt: Date;
-}

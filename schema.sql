@@ -1,14 +1,11 @@
 CREATE TABLE IF NOT EXISTS classifications (
     message_id      TEXT PRIMARY KEY,
-    history_id      TEXT,
     sender          TEXT,
     subject         TEXT,
-    body_sent_to_llm TEXT,
     label           TEXT NOT NULL CHECK (label IN ('phish', 'spam', 'benign', 'failed')),
     confidence      REAL,
     reason          TEXT,
     quarantined     BOOLEAN DEFAULT FALSE,
-    raw_headers     JSONB,
     processed_at    TIMESTAMPTZ DEFAULT now()
 );
 
@@ -36,16 +33,6 @@ CREATE TABLE IF NOT EXISTS accounts (
     added_at        TIMESTAMPTZ DEFAULT now()
 );
 
-DO $$ BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'classifications' AND column_name = 'account_email'
-  ) THEN
-    ALTER TABLE classifications ADD COLUMN account_email TEXT;
-  END IF;
-END $$;
-
-CREATE INDEX IF NOT EXISTS idx_classifications_account ON classifications(account_email);
 
 CREATE TABLE IF NOT EXISTS events (
     message_id    TEXT NOT NULL,

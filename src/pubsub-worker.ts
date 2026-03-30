@@ -77,7 +77,7 @@ export class PubSubWorker {
     }
 
     const email = await gmail.getMessage(messageId);
-    await this.logger.log({ messageId, accountEmail, stage: "message_fetched", level: "info", message: `From: ${email.sender}, Subject: ${email.subject}` });
+    await this.logger.log({ messageId, accountEmail, stage: "message_fetched", level: "info", message: `From: ${email.sender}, Subject: ${email.subject}`, metadata: { historyId: email.historyId, body: email.body, headers: email.rawHeaders } });
 
     let result;
     try {
@@ -111,16 +111,12 @@ export class PubSubWorker {
 
     const inserted = await this.db.saveClassification({
       messageId: email.messageId,
-      historyId: email.historyId,
       sender: email.sender,
       subject: email.subject,
-      bodySentToLlm: email.body,
       label: result.label,
       confidence: result.confidence,
       reason: result.reason,
       quarantined,
-      rawHeaders: email.rawHeaders,
-      accountEmail,
     });
 
     await this.logger.log({ messageId, accountEmail, stage: "saved", level: "info", message: "Classification persisted" });

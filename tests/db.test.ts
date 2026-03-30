@@ -54,10 +54,9 @@ describe("PgDatabase", () => {
   it("saveClassification calls INSERT with correct params", async () => {
     pool.query.mockResolvedValueOnce({ rows: [] });
     await db.saveClassification({
-      messageId: "m1", historyId: "100", sender: "a@b.com",
-      subject: "Hi", bodySentToLlm: "body", label: "benign",
+      messageId: "m1", sender: "a@b.com",
+      subject: "Hi", label: "benign",
       confidence: 0.9, reason: "Normal", quarantined: false,
-      rawHeaders: { From: "a@b.com" },
     });
     expect(pool.query).toHaveBeenCalledOnce();
     const [sql, params] = pool.query.mock.calls[0];
