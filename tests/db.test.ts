@@ -133,6 +133,8 @@ describe("PgDatabase", () => {
     expect(port.checkHealth).toBeTypeOf("function");
     expect(port.getRecentClassifications).toBeTypeOf("function");
     expect(port.getRules).toBeTypeOf("function");
+    expect(port.saveRule).toBeTypeOf("function");
+    expect(port.removeRule).toBeTypeOf("function");
     expect(port.getAccounts).toBeTypeOf("function");
     expect(port.upsertAccount).toBeTypeOf("function");
     expect(port.getAccountHistoryId).toBeTypeOf("function");

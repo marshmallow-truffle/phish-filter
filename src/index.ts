@@ -130,7 +130,7 @@ async function main() {
   });
 
   // 8. Start HTTP server with OAuth routes
-  const oauthRoutes = createOAuthRoutes(accountManager, db, {
+  const oauthRoutes = createOAuthRoutes(accountManager, db, health, {
     ...oauthConfig,
     redirectUri: config.OAUTH_REDIRECT_URI,
   });

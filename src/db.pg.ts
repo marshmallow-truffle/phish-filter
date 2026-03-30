@@ -93,6 +93,17 @@ export class PgDatabase implements DatabasePort {
     return res.rows;
   }
 
+  async saveRule(rule: { field: string; pattern: string; label: string; confidence: number; reason: string }): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO classification_rules (field, pattern, label, confidence, reason) VALUES ($1, $2, $3, $4, $5)",
+      [rule.field, rule.pattern, rule.label, rule.confidence, rule.reason]
+    );
+  }
+
+  async removeRule(id: string): Promise<void> {
+    await this.pool.query("DELETE FROM classification_rules WHERE id = $1", [id]);
+  }
+
   private mapAccountRow(r: any): Account {
     return {
       email: r.email,

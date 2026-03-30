@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { google } from "googleapis";
 import type { AccountManager } from "./account-manager.js";
 import type { DatabasePort } from "./db.port.js";
+import type { ServiceHealth } from "./health.js";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -19,12 +20,19 @@ export interface OAuthConfig {
 export function createOAuthRoutes(
   accountManager: AccountManager,
   db: DatabasePort,
+  health: ServiceHealth,
   oauthConfig: OAuthConfig,
 ) {
   const app = new Hono();
 
   app.get("/", async (c) => {
-    const accounts = await db.getAccounts();
+    const [accounts, classifications, rules, dbHealth] = await Promise.all([
+      db.getAccounts(),
+      db.getRecentClassifications(20),
+      db.getRules(),
+      db.checkHealth().catch(() => null),
+    ]);
+
     const accountRows = accounts
       .map((a) => `<tr>
         <td>${a.email}</td>
@@ -38,22 +46,65 @@ export function createOAuthRoutes(
       </tr>`)
       .join("\n");
 
+    const classificationRows = classifications
+      .map((cl) => `<tr>
+        <td>${cl.sender}</td>
+        <td>${cl.subject}</td>
+        <td class="label-${cl.label}">${cl.label}</td>
+        <td>${cl.confidence}</td>
+        <td>${cl.reason}</td>
+        <td>${cl.quarantined ? "Yes" : ""}</td>
+        <td>${new Date(cl.processed_at).toLocaleString()}</td>
+      </tr>`)
+      .join("\n");
+
+    const ruleRows = rules
+      .map((r) => `<tr>
+        <td>${r.field}</td>
+        <td><code>${r.pattern}</code></td>
+        <td class="label-${r.label}">${r.label}</td>
+        <td>${r.confidence}</td>
+        <td>${r.reason}</td>
+        <td><form method="POST" action="/rules/${r.id}/remove" style="margin:0" onsubmit="return confirm('Remove this rule?')"><button type="submit" class="btn-remove">Remove</button></form></td>
+      </tr>`)
+      .join("\n");
+
     return c.html(`<!DOCTYPE html>
 <html>
 <head><title>Phish Filter</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 40px auto; padding: 0 20px; }
-  table { border-collapse: collapse; width: 100%; margin: 20px 0; }
-  th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 40px auto; padding: 0 20px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 20px; }
+  th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; font-size: 14px; }
   th { background: #f5f5f5; }
-  .btn { display: inline-block; padding: 10px 20px; background: #4285f4; color: white; text-decoration: none; border-radius: 4px; }
+  h2 { margin-top: 30px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+  .btn { display: inline-block; padding: 8px 16px; background: #4285f4; color: white; text-decoration: none; border-radius: 4px; font-size: 14px; }
   .btn:hover { background: #3367d6; }
-  .btn-remove { padding: 4px 12px; background: #d93025; color: white; border: none; border-radius: 4px; cursor: pointer; }
+  .btn-remove { padding: 3px 10px; background: #d93025; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
   .btn-remove:hover { background: #b71c1c; }
+  .label-phish { color: #d93025; font-weight: bold; }
+  .label-spam { color: #e37400; font-weight: bold; }
+  .label-benign { color: #188038; }
+  .status { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 13px; }
+  .status-healthy { background: #e6f4ea; color: #188038; }
+  .status-degraded { background: #fce8e6; color: #d93025; }
+  .add-rule { margin: 10px 0 20px; }
+  .add-rule input, .add-rule select { padding: 6px 10px; font-size: 14px; border: 1px solid #ddd; border-radius: 4px; }
+  .add-rule button { padding: 6px 16px; }
+  code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
 </style>
 </head>
 <body>
   <h1>Phish Filter</h1>
+
+  <h2>Health</h2>
+  <p>
+    Status: <span class="status status-${dbHealth ? "healthy" : "degraded"}">${dbHealth ? "healthy" : "degraded"}</span>
+    &nbsp; Uptime: ${Math.round(health.uptimeSeconds)}s
+    &nbsp; Total processed: ${dbHealth?.total_count ?? 0}
+    ${health.lastError ? `&nbsp; Last error: ${health.lastError}` : ""}
+  </p>
+
   <h2>Monitored Accounts</h2>
   ${accounts.length > 0
     ? `<table>
@@ -62,11 +113,38 @@ export function createOAuthRoutes(
       </table>`
     : "<p>No accounts registered yet.</p>"}
   <a href="/oauth/authorize" class="btn">Add Gmail Account</a>
-  <h2>Quick Links</h2>
-  <ul>
-    <li><a href="/health">Health Status</a></li>
-    <li><a href="/health/classifications">Recent Classifications</a></li>
-  </ul>
+
+  <h2>Classification Rules</h2>
+  ${rules.length > 0
+    ? `<table>
+        <tr><th>Field</th><th>Pattern</th><th>Label</th><th>Confidence</th><th>Reason</th><th></th></tr>
+        ${ruleRows}
+      </table>`
+    : "<p>No rules configured. Emails will be classified by LLM only.</p>"}
+  <form method="POST" action="/rules/add" class="add-rule">
+    <select name="field">
+      <option value="sender_domain">Sender Domain</option>
+      <option value="subject">Subject (regex)</option>
+      <option value="body">Body (regex)</option>
+    </select>
+    <input name="pattern" placeholder="Pattern" required size="25">
+    <select name="label">
+      <option value="phish">phish</option>
+      <option value="spam">spam</option>
+      <option value="benign">benign</option>
+    </select>
+    <input name="confidence" type="number" value="1.0" min="0" max="1" step="0.1" style="width:60px">
+    <input name="reason" placeholder="Reason" required size="20">
+    <button type="submit" class="btn">Add Rule</button>
+  </form>
+
+  <h2>Recent Classifications</h2>
+  ${classifications.length > 0
+    ? `<table>
+        <tr><th>Sender</th><th>Subject</th><th>Label</th><th>Confidence</th><th>Reason</th><th>Quarantined</th><th>Time</th></tr>
+        ${classificationRows}
+      </table>`
+    : "<p>No emails classified yet.</p>"}
 </body>
 </html>`);
   });
@@ -75,6 +153,23 @@ export function createOAuthRoutes(
     const email = decodeURIComponent(c.req.param("email"));
     await db.removeAccount(email);
     accountManager.unregister(email);
+    return c.redirect("/");
+  });
+
+  app.post("/rules/add", async (c) => {
+    const body = await c.req.parseBody();
+    await db.saveRule({
+      field: body.field as string,
+      pattern: body.pattern as string,
+      label: body.label as string,
+      confidence: parseFloat(body.confidence as string) || 1.0,
+      reason: body.reason as string,
+    });
+    return c.redirect("/");
+  });
+
+  app.post("/rules/:id/remove", async (c) => {
+    await db.removeRule(c.req.param("id"));
     return c.redirect("/");
   });
 
@@ -114,21 +209,17 @@ export function createOAuthRoutes(
 </body></html>`, 400);
     }
 
-    // Discover email address from the authorized account
     auth.setCredentials(tokens);
     const gmail = google.gmail({ version: "v1", auth });
     const profile = await gmail.users.getProfile({ userId: "me" });
     const email = profile.data.emailAddress!;
 
-    // Persist token first (so it survives even if register fails)
     await db.upsertAccount(email, tokens.refresh_token);
 
-    // Hot-register: set up label, watch, catch up
     try {
       await accountManager.register(email, tokens.refresh_token);
     } catch (err) {
       console.error(`Account ${email} saved but registration failed:`, err);
-      // Account is persisted — will retry on next server restart
       return c.html(`<!DOCTYPE html>
 <html><body>
   <h1>Account saved, but setup incomplete</h1>

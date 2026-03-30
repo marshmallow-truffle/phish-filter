@@ -53,6 +53,8 @@ export interface DatabasePort {
   checkHealth(): Promise<HealthStats>;
   getRecentClassifications(limit?: number): Promise<ClassificationRow[]>;
   getRules(): Promise<ClassificationRule[]>;
+  saveRule(rule: { field: string; pattern: string; label: string; confidence: number; reason: string }): Promise<void>;
+  removeRule(id: string): Promise<void>;
   getAccounts(): Promise<Account[]>;
   getAccount(email: string): Promise<Account | null>;
   upsertAccount(email: string, refreshToken: string): Promise<void>;

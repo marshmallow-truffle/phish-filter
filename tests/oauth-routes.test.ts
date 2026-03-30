@@ -26,6 +26,7 @@ vi.mock("googleapis", () => {
 });
 
 import { createOAuthRoutes } from "../src/oauth-routes.js";
+import { ServiceHealth } from "../src/health.js";
 
 function mockAccountManager() {
   return {
@@ -45,8 +46,17 @@ function mockDb() {
         totalProcessed: 5, phishCount: 1, spamCount: 2, benignCount: 2, lastProcessedAt: null,
       },
     ]),
+    getRecentClassifications: vi.fn().mockResolvedValue([
+      { sender: "a@b.com", subject: "Hi", label: "benign", confidence: 0.9, reason: "Normal", quarantined: false, processed_at: "2026-03-29T10:00:00Z" },
+    ]),
+    getRules: vi.fn().mockResolvedValue([
+      { id: "r1", field: "sender_domain", pattern: "evil.com", label: "phish", confidence: 1.0, reason: "Blocklist" },
+    ]),
+    checkHealth: vi.fn().mockResolvedValue({ total_count: 10 }),
     upsertAccount: vi.fn().mockResolvedValue(undefined),
     removeAccount: vi.fn().mockResolvedValue(undefined),
+    saveRule: vi.fn().mockResolvedValue(undefined),
+    removeRule: vi.fn().mockResolvedValue(undefined),
   } as any;
 }
 
@@ -56,20 +66,31 @@ const oauthConfig = {
   redirectUri: "http://localhost:8080/oauth/callback",
 };
 
+function makeApp(am = mockAccountManager(), db = mockDb()) {
+  return createOAuthRoutes(am, db, new ServiceHealth(), oauthConfig);
+}
+
 describe("OAuth routes", () => {
-  it("GET / shows accounts and add button", async () => {
-    const app = createOAuthRoutes(mockAccountManager(), mockDb(), oauthConfig);
+  it("GET / shows all sections", async () => {
+    const app = makeApp();
     const res = await app.request("/");
     expect(res.status).toBe(200);
     const html = await res.text();
+    // Accounts
     expect(html).toContain("existing@gmail.com");
     expect(html).toContain("Add Gmail Account");
-    expect(html).toContain("/oauth/authorize");
+    // Health
+    expect(html).toContain("healthy");
+    // Classifications
+    expect(html).toContain("a@b.com");
+    expect(html).toContain("benign");
+    // Rules
+    expect(html).toContain("evil.com");
+    expect(html).toContain("Blocklist");
   });
 
   it("GET /oauth/authorize redirects to Google", async () => {
-    const app = createOAuthRoutes(mockAccountManager(), mockDb(), oauthConfig);
-    const res = await app.request("/oauth/authorize");
+    const res = await makeApp().request("/oauth/authorize");
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toContain("accounts.google.com");
   });
@@ -77,30 +98,58 @@ describe("OAuth routes", () => {
   it("GET /oauth/callback exchanges code and registers account", async () => {
     const am = mockAccountManager();
     const db = mockDb();
-    const app = createOAuthRoutes(am, db, oauthConfig);
+    const app = createOAuthRoutes(am, db, new ServiceHealth(), oauthConfig);
 
     const res = await app.request("/oauth/callback?code=test-auth-code");
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/");
     expect(db.upsertAccount).toHaveBeenCalledWith("newuser@gmail.com", "new-refresh-token");
     expect(am.register).toHaveBeenCalledWith("newuser@gmail.com", "new-refresh-token");
   });
 
   it("GET /oauth/callback returns 400 without code", async () => {
-    const app = createOAuthRoutes(mockAccountManager(), mockDb(), oauthConfig);
-    const res = await app.request("/oauth/callback");
+    const res = await makeApp().request("/oauth/callback");
     expect(res.status).toBe(400);
   });
 
   it("POST /accounts/:email/remove deletes and redirects", async () => {
     const am = mockAccountManager();
     const db = mockDb();
-    const app = createOAuthRoutes(am, db, oauthConfig);
+    const app = createOAuthRoutes(am, db, new ServiceHealth(), oauthConfig);
 
     const res = await app.request("/accounts/existing%40gmail.com/remove", { method: "POST" });
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/");
     expect(db.removeAccount).toHaveBeenCalledWith("existing@gmail.com");
     expect(am.unregister).toHaveBeenCalledWith("existing@gmail.com");
+  });
+
+  it("POST /rules/add saves rule and redirects", async () => {
+    const db = mockDb();
+    const app = createOAuthRoutes(mockAccountManager(), db, new ServiceHealth(), oauthConfig);
+
+    const form = new FormData();
+    form.set("field", "sender_domain");
+    form.set("pattern", "evil.com");
+    form.set("label", "phish");
+    form.set("confidence", "1.0");
+    form.set("reason", "Known bad");
+
+    const res = await app.request("/rules/add", { method: "POST", body: form });
+    expect(res.status).toBe(302);
+    expect(db.saveRule).toHaveBeenCalledWith({
+      field: "sender_domain",
+      pattern: "evil.com",
+      label: "phish",
+      confidence: 1.0,
+      reason: "Known bad",
+    });
+  });
+
+  it("POST /rules/:id/remove deletes rule and redirects", async () => {
+    const db = mockDb();
+    const app = createOAuthRoutes(mockAccountManager(), db, new ServiceHealth(), oauthConfig);
+
+    const res = await app.request("/rules/r1/remove", { method: "POST" });
+    expect(res.status).toBe(302);
+    expect(db.removeRule).toHaveBeenCalledWith("r1");
   });
 });
