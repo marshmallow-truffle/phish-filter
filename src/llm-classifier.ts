@@ -66,9 +66,10 @@ export class LlmClassifier implements ClassifierPort {
         messages: [{ role: "user", content: userMessage }],
       });
 
-      const text = response.content[0].text ?? "";
+      const raw = (response.content[0].text ?? "").trim();
+      const text = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
       try {
-        const parsed = JSON.parse(text.trim());
+        const parsed = JSON.parse(text);
         return ClassificationResultSchema.parse(parsed);
       } catch (err) {
         if (attempt === 0) {
