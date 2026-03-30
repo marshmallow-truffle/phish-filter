@@ -67,14 +67,16 @@ export class PubSubWorker {
     const level = result.confidence === 0 && result.reason.startsWith("Classification failed") ? "warn" : "info";
     await this.logger.log({ messageId, accountEmail, stage: "classified", level, message: `${result.label} (${Math.round(result.confidence * 100)}%) — ${result.reason}`, metadata: { label: result.label, confidence: result.confidence, reason: result.reason } });
 
+    const labelMap: Record<string, string> = {
+      phish: this.quarantineLabelName,
+      spam: this.spamLabelName,
+    };
+    const labelName = labelMap[result.label];
     let quarantined = false;
-    if (result.label === "phish") {
-      await gmail.labelMessage(messageId, this.quarantineLabelName);
-      await this.logger.log({ messageId, accountEmail, stage: "quarantined", level: "info", message: "Moved to PHISH_QUARANTINE label" });
+    if (labelName) {
+      await gmail.labelMessage(messageId, labelName);
       quarantined = true;
-    } else if (result.label === "spam") {
-      await gmail.labelMessage(messageId, this.spamLabelName);
-      await this.logger.log({ messageId, accountEmail, stage: "labeled_spam", level: "info", message: "Labeled as SPAM_DETECTED" });
+      await this.logger.log({ messageId, accountEmail, stage: "labeled", level: "info", message: `Labeled as ${labelName} and removed from inbox` });
     }
 
     await this.db.saveClassification({
