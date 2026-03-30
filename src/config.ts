@@ -13,6 +13,7 @@ const ConfigSchema = z.object({
   LLM_MODEL: z.string().default("claude-haiku-4-5-20251001"),
   LLM_MAX_CONCURRENT: z.coerce.number().default(5),
   QUARANTINE_LABEL_NAME: z.string().default("PHISH_QUARANTINE"),
+  SPAM_LABEL_NAME: z.string().default("SPAM_DETECTED"),
   MAX_BODY_LENGTH: z.coerce.number().default(2000),
   OAUTH_REDIRECT_URI: z.string().default("http://localhost:8080/oauth/callback"),
   PORT: z.coerce.number().default(8080),

@@ -28,7 +28,7 @@ export class AccountManager {
     const gmailService = credManager.getGmailService();
     const gmail = new GmailClient(gmailService, this.gmailConfig);
 
-    await gmail.setupQuarantineLabel();
+    await gmail.setupLabels();
     const watchResult = await gmail.watch();
     console.log(`Registered account ${email}, watch until ${watchResult.expiration}`);
 

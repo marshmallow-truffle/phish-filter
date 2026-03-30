@@ -36,7 +36,7 @@ function makeMocks(classifyResult: { label: string; confidence: number; reason: 
         )
       )
     ),
-    quarantineMessage: vi.fn().mockResolvedValue(undefined),
+    labelMessage: vi.fn().mockResolvedValue(undefined),
   };
   return {
     gmail,
@@ -63,7 +63,8 @@ describe("Pipeline end-to-end", () => {
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
-      mocks.logger as any
+      mocks.logger as any,
+      { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED" }
     );
 
     const result = await worker.processMessage("msg1", mocks.gmail as any);
@@ -71,7 +72,7 @@ describe("Pipeline end-to-end", () => {
 
     expect(mocks.gmail.getMessage).toHaveBeenCalledWith("msg1");
     expect(mocks.classifier.classify).toHaveBeenCalledOnce();
-    expect(mocks.gmail.quarantineMessage).toHaveBeenCalledWith("msg1");
+    expect(mocks.gmail.labelMessage).toHaveBeenCalledWith("msg1", "PHISH_QUARANTINE");
     expect(mocks.db.saveClassification).toHaveBeenCalledOnce();
 
     const saveCall = mocks.db.saveClassification.mock.calls[0][0];
@@ -90,7 +91,8 @@ describe("Pipeline end-to-end", () => {
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
-      mocks.logger as any
+      mocks.logger as any,
+      { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED" }
     );
 
     const result = await worker.processMessage("msg1", mocks.gmail as any);
@@ -109,11 +111,12 @@ describe("Pipeline end-to-end", () => {
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
-      mocks.logger as any
+      mocks.logger as any,
+      { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED" }
     );
 
     await worker.processMessage("msg1", mocks.gmail as any);
-    expect(mocks.gmail.quarantineMessage).not.toHaveBeenCalled();
+    expect(mocks.gmail.labelMessage).not.toHaveBeenCalled();
     const saveCall = mocks.db.saveClassification.mock.calls[0][0];
     expect(saveCall.quarantined).toBe(false);
   });

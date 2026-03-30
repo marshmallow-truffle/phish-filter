@@ -6,11 +6,18 @@ import type { EventLogger } from "./event-logger.js";
 import { DEFAULT_CLASSIFICATION } from "./models.js";
 import { withRetry } from "./retry.js";
 
+export interface PubSubWorkerConfig {
+  quarantineLabelName: string;
+  spamLabelName: string;
+}
+
 export class PubSubWorker {
   private accountManager: AccountManager;
   private classifier: ClassifierPort;
   private db: DatabasePort;
   private logger: EventLogger;
+  private quarantineLabelName: string;
+  private spamLabelName: string;
   private running = false;
   private onClassified?: (label: string) => void;
 
@@ -19,12 +26,15 @@ export class PubSubWorker {
     classifier: ClassifierPort,
     db: DatabasePort,
     logger: EventLogger,
+    labelConfig: PubSubWorkerConfig,
     onClassified?: (label: string) => void
   ) {
     this.accountManager = accountManager;
     this.classifier = classifier;
     this.db = db;
     this.logger = logger;
+    this.quarantineLabelName = labelConfig.quarantineLabelName;
+    this.spamLabelName = labelConfig.spamLabelName;
     this.onClassified = onClassified;
   }
 
@@ -59,9 +69,12 @@ export class PubSubWorker {
 
     let quarantined = false;
     if (result.label === "phish") {
-      await gmail.quarantineMessage(messageId);
+      await gmail.labelMessage(messageId, this.quarantineLabelName);
       await this.logger.log({ messageId, accountEmail, stage: "quarantined", level: "info", message: "Moved to PHISH_QUARANTINE label" });
       quarantined = true;
+    } else if (result.label === "spam") {
+      await gmail.labelMessage(messageId, this.spamLabelName, false);
+      await this.logger.log({ messageId, accountEmail, stage: "labeled_spam", level: "info", message: "Labeled as SPAM_DETECTED" });
     }
 
     await this.db.saveClassification({

@@ -27,7 +27,7 @@ function makeMocks() {
     getMessage: vi.fn().mockImplementation((id: string) =>
       Promise.resolve(parseEmailMessage(makeRawMessage(id)))
     ),
-    quarantineMessage: vi.fn().mockResolvedValue(undefined),
+    labelMessage: vi.fn().mockResolvedValue(undefined),
     watch: vi.fn().mockResolvedValue({ historyId: "200", expiration: "9999" }),
   };
   return {
@@ -66,7 +66,8 @@ describe("PubSubWorker", () => {
       mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any,
-      mocks.logger as any
+      mocks.logger as any,
+      { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED" }
     );
   });
 
@@ -95,12 +96,12 @@ describe("PubSubWorker", () => {
       reason: "Suspicious URL",
     });
     await worker.processMessage("msg1", mocks.gmail as any);
-    expect(mocks.gmail.quarantineMessage).toHaveBeenCalledWith("msg1");
+    expect(mocks.gmail.labelMessage).toHaveBeenCalledWith("msg1", "PHISH_QUARANTINE");
   });
 
-  it("does not quarantine benign messages", async () => {
+  it("does not label benign messages", async () => {
     await worker.processMessage("msg1", mocks.gmail as any);
-    expect(mocks.gmail.quarantineMessage).not.toHaveBeenCalled();
+    expect(mocks.gmail.labelMessage).not.toHaveBeenCalled();
   });
 
   it("routes notification by emailAddress", async () => {

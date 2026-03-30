@@ -86,41 +86,40 @@ export interface GmailClientConfig {
   gcpProjectId: string;
   pubsubTopic: string;
   quarantineLabelName: string;
+  spamLabelName: string;
 }
 
 export class GmailClient {
   private service: gmail_v1.Gmail;
   private config: GmailClientConfig;
-  private quarantineLabelId: string | null = null;
+  private labelIds = new Map<string, string>();
 
   constructor(service: gmail_v1.Gmail, config: GmailClientConfig) {
     this.service = service;
     this.config = config;
   }
 
-  async setupQuarantineLabel(): Promise<string> {
+  async setupLabels(): Promise<void> {
     const res = await this.service.users.labels.list({ userId: "me" });
-    const existing = res.data.labels?.find(
-      (l) => l.name === this.config.quarantineLabelName
-    );
-    if (existing?.id) {
-      this.quarantineLabelId = existing.id;
-      return existing.id;
-    }
+    const existingLabels = res.data.labels ?? [];
 
-    const created = await this.service.users.labels.create({
-      userId: "me",
-      requestBody: {
-        name: this.config.quarantineLabelName,
-        labelListVisibility: "labelShow",
-        messageListVisibility: "show",
-      },
-    });
-    this.quarantineLabelId = created.data.id!;
-    console.log(
-      `Created quarantine label: ${this.config.quarantineLabelName} (ID: ${created.data.id})`
-    );
-    return created.data.id!;
+    for (const name of [this.config.quarantineLabelName, this.config.spamLabelName]) {
+      const existing = existingLabels.find((l) => l.name === name);
+      if (existing?.id) {
+        this.labelIds.set(name, existing.id);
+      } else {
+        const created = await this.service.users.labels.create({
+          userId: "me",
+          requestBody: {
+            name,
+            labelListVisibility: "labelShow",
+            messageListVisibility: "show",
+          },
+        });
+        this.labelIds.set(name, created.data.id!);
+        console.log(`Created label: ${name} (ID: ${created.data.id})`);
+      }
+    }
   }
 
   async watch(): Promise<{ historyId: string; expiration: string }> {
@@ -176,20 +175,20 @@ export class GmailClient {
     );
   }
 
-  async quarantineMessage(messageId: string): Promise<void> {
-    if (!this.quarantineLabelId) {
-      throw new Error(
-        "Quarantine label not set up. Call setupQuarantineLabel() first."
-      );
+  async labelMessage(messageId: string, labelName: string, removeFromInbox = true): Promise<void> {
+    const labelId = this.labelIds.get(labelName);
+    if (!labelId) {
+      throw new Error(`Label "${labelName}" not set up. Call setupLabels() first.`);
     }
+    const removeLabelIds = removeFromInbox ? ["INBOX"] : [];
     await this.service.users.messages.modify({
       userId: "me",
       id: messageId,
       requestBody: {
-        addLabelIds: [this.quarantineLabelId],
-        removeLabelIds: ["INBOX"],
+        addLabelIds: [labelId],
+        removeLabelIds,
       },
     });
-    console.log(`Quarantined message ${messageId}`);
+    console.log(`Labeled message ${messageId} as ${labelName}`);
   }
 }

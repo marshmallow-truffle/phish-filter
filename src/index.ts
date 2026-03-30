@@ -84,6 +84,7 @@ async function main() {
     gcpProjectId: config.GCP_PROJECT_ID,
     pubsubTopic: config.PUBSUB_TOPIC,
     quarantineLabelName: config.QUARANTINE_LABEL_NAME,
+    spamLabelName: config.SPAM_LABEL_NAME,
   };
   const oauthConfig = {
     clientId: config.GOOGLE_CLIENT_ID,
@@ -124,7 +125,10 @@ async function main() {
   // 6. Create event logger and worker
   const { EventLogger } = await import("./event-logger.js");
   const logger = new EventLogger(db);
-  const worker = new PubSubWorker(accountManager, classifier, db, logger, (label) => health.record(label));
+  const worker = new PubSubWorker(accountManager, classifier, db, logger, {
+    quarantineLabelName: config.QUARANTINE_LABEL_NAME,
+    spamLabelName: config.SPAM_LABEL_NAME,
+  }, (label) => health.record(label));
 
   // 7. Start Pub/Sub pull
   worker.pullLoop(config.PUBSUB_SUBSCRIPTION, config.GCP_PROJECT_ID).catch((err) => {

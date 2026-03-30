@@ -7,7 +7,10 @@ vi.mock("googleapis", () => {
   const mockGmail = {
     users: {
       messages: { get: vi.fn(), modify: vi.fn() },
-      labels: { list: vi.fn().mockResolvedValue({ data: { labels: [{ name: "PHISH_QUARANTINE", id: "Label_123" }] } }), create: vi.fn() },
+      labels: {
+        list: vi.fn().mockResolvedValue({ data: { labels: [{ name: "PHISH_QUARANTINE", id: "Label_123" }, { name: "SPAM_DETECTED", id: "Label_456" }] } }),
+        create: vi.fn().mockResolvedValue({ data: { id: "Label_new" } }),
+      },
       history: { list: vi.fn().mockResolvedValue({ data: { history: [] } }) },
       watch: vi.fn().mockResolvedValue({ data: { historyId: "100", expiration: "9999999" } }),
     },
@@ -39,6 +42,7 @@ const gmailConfig = {
   gcpProjectId: "test-project",
   pubsubTopic: "test-topic",
   quarantineLabelName: "PHISH_QUARANTINE",
+  spamLabelName: "SPAM_DETECTED",
 };
 
 const oauthConfig = {
@@ -86,7 +90,10 @@ describe("AccountManager", () => {
     const goodMock = {
       users: {
         messages: { get: vi.fn(), modify: vi.fn() },
-        labels: { list: vi.fn().mockResolvedValue({ data: { labels: [{ name: "PHISH_QUARANTINE", id: "Label_123" }] } }), create: vi.fn() },
+        labels: {
+        list: vi.fn().mockResolvedValue({ data: { labels: [{ name: "PHISH_QUARANTINE", id: "Label_123" }, { name: "SPAM_DETECTED", id: "Label_456" }] } }),
+        create: vi.fn().mockResolvedValue({ data: { id: "Label_new" } }),
+      },
         history: { list: vi.fn().mockResolvedValue({ data: { history: [] } }) },
         watch: vi.fn().mockResolvedValue({ data: { historyId: "100", expiration: "9999999" } }),
       },
@@ -94,7 +101,10 @@ describe("AccountManager", () => {
     const badMock = {
       users: {
         messages: { get: vi.fn(), modify: vi.fn() },
-        labels: { list: vi.fn().mockResolvedValue({ data: { labels: [{ name: "PHISH_QUARANTINE", id: "Label_123" }] } }), create: vi.fn() },
+        labels: {
+        list: vi.fn().mockResolvedValue({ data: { labels: [{ name: "PHISH_QUARANTINE", id: "Label_123" }, { name: "SPAM_DETECTED", id: "Label_456" }] } }),
+        create: vi.fn().mockResolvedValue({ data: { id: "Label_new" } }),
+      },
         history: { list: vi.fn().mockResolvedValue({ data: { history: [] } }) },
         watch: vi.fn().mockRejectedValue(new Error("auth failed")),
       },
@@ -126,7 +136,10 @@ describe("AccountManager", () => {
     const historyMock = {
       users: {
         messages: { get: vi.fn(), modify: vi.fn() },
-        labels: { list: vi.fn().mockResolvedValue({ data: { labels: [{ name: "PHISH_QUARANTINE", id: "Label_123" }] } }), create: vi.fn() },
+        labels: {
+        list: vi.fn().mockResolvedValue({ data: { labels: [{ name: "PHISH_QUARANTINE", id: "Label_123" }, { name: "SPAM_DETECTED", id: "Label_456" }] } }),
+        create: vi.fn().mockResolvedValue({ data: { id: "Label_new" } }),
+      },
         history: {
           list: vi.fn().mockResolvedValue({
             data: {
