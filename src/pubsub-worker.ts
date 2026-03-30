@@ -11,6 +11,33 @@ export interface PubSubWorkerConfig {
   spamLabelName: string;
 }
 
+interface QueueItem {
+  ack: () => void;
+  nack: () => void;
+}
+
+export class NotificationQueue {
+  private items: QueueItem[] = [];
+  private waiter: ((item: QueueItem) => void) | null = null;
+
+  push(item: QueueItem): void {
+    if (this.waiter) {
+      this.waiter(item);
+      this.waiter = null;
+    } else {
+      this.items.push(item);
+    }
+  }
+
+  take(): Promise<QueueItem> {
+    const item = this.items.shift();
+    if (item !== undefined) return Promise.resolve(item);
+    return new Promise((resolve) => {
+      this.waiter = resolve;
+    });
+  }
+}
+
 export class PubSubWorker {
   private accountManager: AccountManager;
   private classifier: ClassifierPort;
@@ -18,7 +45,8 @@ export class PubSubWorker {
   private logger: EventLogger;
   private quarantineLabelName: string;
   private spamLabelName: string;
-  private running = false;
+  private running = true;
+  private queues = new Map<string, NotificationQueue>();
   private onClassified?: (label: string) => void;
 
   constructor(
@@ -38,10 +66,11 @@ export class PubSubWorker {
     this.onClassified = onClassified;
   }
 
-  async processMessage(messageId: string, gmail: GmailClient, accountEmail?: string): Promise<boolean> {
+  /** Process a single message. Returns the message's historyId on success, null if skipped (dedup). */
+  async processMessage(messageId: string, gmail: GmailClient, accountEmail?: string): Promise<string | null> {
     if (await this.db.isProcessed(messageId)) {
       await this.logger.log({ messageId, accountEmail, stage: "message_skipped", level: "info", message: "Already processed (dedup)" });
-      return false;
+      return null;
     }
 
     const email = await gmail.getMessage(messageId);
@@ -99,49 +128,74 @@ export class PubSubWorker {
       await this.db.incrementAccountStats(accountEmail, result.label);
     }
     this.onClassified?.(result.label);
-    return true;
+    return email.historyId;
   }
 
-  async processNotification(data: Buffer): Promise<void> {
-    const payload = JSON.parse(data.toString());
-    const { emailAddress, historyId } = payload;
-    if (!historyId || !emailAddress) {
-      await this.logger.log({ messageId: `notification-${Date.now()}`, stage: "notification_invalid", level: "warn", message: "Missing historyId or emailAddress", metadata: payload });
-      return;
+  /** Enqueue a notification for an account. Creates the processing loop on first call per account. */
+  enqueue(emailAddress: string, ack: () => void, nack: () => void): void {
+    let queue = this.queues.get(emailAddress);
+    if (!queue) {
+      queue = new NotificationQueue();
+      this.queues.set(emailAddress, queue);
+      this.startAccountLoop(emailAddress, queue);
     }
+    queue.push({ ack, nack });
+  }
 
-    await this.logger.log({ messageId: `history-${historyId}`, accountEmail: emailAddress, stage: "notification_received", level: "info", message: `historyId=${historyId}` });
+  /** Trigger catch-up for an account by pushing a synthetic notification. */
+  triggerCatchUp(emailAddress: string): void {
+    this.enqueue(emailAddress, () => {}, () => {});
+  }
 
-    const gmail = this.accountManager.get(emailAddress);
-    if (!gmail) {
-      await this.logger.log({ messageId: `history-${historyId}`, accountEmail: emailAddress, stage: "account_not_found", level: "warn", message: `No registered account for ${emailAddress}` });
-      return;
+  /** Serial processing loop for one account. */
+  private async startAccountLoop(emailAddress: string, queue: NotificationQueue): Promise<void> {
+    while (this.running) {
+      const notification = await queue.take();
+      try {
+        const gmail = this.accountManager.get(emailAddress);
+        if (!gmail) {
+          notification.ack();
+          continue;
+        }
+
+        const cursor = await this.db.getAccountHistoryId(emailAddress);
+        const messageIds = await gmail.getHistory(cursor);
+
+        let maxHistoryId: string | null = null;
+        for (const msgId of messageIds) {
+          const historyId = await this.processMessage(msgId, gmail, emailAddress);
+          if (historyId && (!maxHistoryId || BigInt(historyId) > BigInt(maxHistoryId))) {
+            maxHistoryId = historyId;
+          }
+        }
+
+        if (maxHistoryId) {
+          await this.db.updateAccountHistoryId(emailAddress, maxHistoryId);
+        }
+        notification.ack();
+      } catch (err) {
+        console.error(`Error processing notifications for ${emailAddress}:`, err);
+        notification.nack();
+      }
     }
-
-    const lastHistoryId = await this.db.getAccountHistoryId(emailAddress);
-    const messageIds = await gmail.getHistory(lastHistoryId);
-
-    for (const msgId of messageIds) {
-      await this.processMessage(msgId, gmail, emailAddress);
-    }
-
-    await this.db.updateAccountHistoryId(emailAddress, String(historyId));
   }
 
   async pullLoop(subscriptionName: string, projectId?: string): Promise<void> {
     const { PubSub } = await import("@google-cloud/pubsub");
     const pubsub = new PubSub({ projectId });
     const subscription = pubsub.subscription(subscriptionName);
-    this.running = true;
     console.log(`Starting Pub/Sub pull loop on ${subscriptionName}`);
 
-    subscription.on("message", async (message: any) => {
+    subscription.on("message", (message: any) => {
       try {
-        await this.processNotification(message.data);
-        message.ack();
-      } catch (err) {
-        console.error("Failed to process notification:", err);
-        message.nack();
+        const payload = JSON.parse(message.data.toString());
+        if (!payload.historyId || !payload.emailAddress) {
+          message.ack();
+          return;
+        }
+        this.enqueue(payload.emailAddress, () => message.ack(), () => message.nack());
+      } catch {
+        message.ack(); // unparseable, discard
       }
     });
 

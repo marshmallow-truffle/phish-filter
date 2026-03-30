@@ -130,7 +130,12 @@ async function main() {
     spamLabelName: config.SPAM_LABEL_NAME,
   }, (label) => health.record(label));
 
-  // 7. Start Pub/Sub pull
+  // 7. Trigger catch-up for all registered accounts
+  for (const email of accountManager.emails()) {
+    worker.triggerCatchUp(email);
+  }
+
+  // 8. Start Pub/Sub pull
   worker.pullLoop(config.PUBSUB_SUBSCRIPTION, config.GCP_PROJECT_ID).catch((err) => {
     console.error("Pub/Sub pull loop crashed:", err);
     health.recordError(`Pull loop crashed: ${err}`);

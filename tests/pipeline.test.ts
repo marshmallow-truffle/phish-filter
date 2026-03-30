@@ -67,8 +67,8 @@ describe("Pipeline end-to-end", () => {
       { quarantineLabelName: "PHISH_QUARANTINE", spamLabelName: "SPAM_DETECTED" }
     );
 
-    const result = await worker.processMessage("msg1", mocks.gmail as any);
-    expect(result).toBe(true);
+    const historyId = await worker.processMessage("msg1", mocks.gmail as any);
+    expect(historyId).toBe("100"); // returned historyId from the message
 
     expect(mocks.gmail.getMessage).toHaveBeenCalledWith("msg1");
     expect(mocks.classifier.classify).toHaveBeenCalledOnce();
@@ -96,7 +96,7 @@ describe("Pipeline end-to-end", () => {
     );
 
     const result = await worker.processMessage("msg1", mocks.gmail as any);
-    expect(result).toBe(false);
+    expect(result).toBeNull();
     expect(mocks.gmail.getMessage).not.toHaveBeenCalled();
     expect(mocks.classifier.classify).not.toHaveBeenCalled();
   });

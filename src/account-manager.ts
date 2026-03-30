@@ -32,21 +32,15 @@ export class AccountManager {
     const watchResult = await gmail.watch();
     console.log(`Registered account ${email}, watch until ${watchResult.expiration}`);
 
-    // Catch up on missed messages since last known history ID
+    // For fresh accounts, set baseline cursor so catch-up doesn't try historyId=0
     const lastHistoryId = await this.db.getAccountHistoryId(email);
     if (lastHistoryId === "0") {
-      // Fresh account — no history to replay. Use current historyId as baseline.
       await this.db.updateAccountHistoryId(email, watchResult.historyId);
       console.log(`Fresh account ${email}, baseline history ${watchResult.historyId}`);
-    } else {
-      const messageIds = await gmail.getHistory(lastHistoryId);
-      console.log(`Catching up ${email}: ${messageIds.length} messages since history ${lastHistoryId}`);
-      if (messageIds.length > 0) {
-        await this.db.updateAccountHistoryId(email, watchResult.historyId);
-      }
     }
 
     this.clients.set(email, gmail);
+    // Caller triggers catch-up via worker queue — not done here
   }
 
   /** Load all accounts from DB and register each. */
