@@ -1,6 +1,5 @@
 CREATE TABLE IF NOT EXISTS classifications (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    message_id      TEXT UNIQUE NOT NULL,
+    message_id      TEXT PRIMARY KEY,
     history_id      TEXT,
     sender          TEXT,
     subject         TEXT,
