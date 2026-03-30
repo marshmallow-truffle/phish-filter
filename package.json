@@ -15,6 +15,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@google-cloud/pubsub": "^4.9.0",
     "@hono/node-server": "^1.13.0",
+    "dotenv": "^17.3.1",
     "googleapis": "^144.0.0",
     "hono": "^4.6.0",
     "html-to-text": "^9.0.5",

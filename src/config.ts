@@ -1,4 +1,4 @@
-// src/config.ts
+import "dotenv/config";
 import { z } from "zod";
 
 const ConfigSchema = z.object({
