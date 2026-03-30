@@ -36,7 +36,7 @@ export class PgDatabase implements DatabasePort {
   }
 
   async saveClassification(record: SaveClassificationInput): Promise<boolean> {
-    await this.pool.query(
+    const res = await this.pool.query(
       `INSERT INTO classifications
          (message_id, history_id, sender, subject, body_sent_to_llm,
           label, confidence, reason, quarantined, raw_headers, account_email)
@@ -56,7 +56,7 @@ export class PgDatabase implements DatabasePort {
         record.accountEmail ?? null,
       ]
     );
-    return true;
+    return (res.rowCount ?? 0) > 0;
   }
 
   async getLastHistoryId(): Promise<string> {

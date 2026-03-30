@@ -70,7 +70,7 @@ export class PubSubWorker {
     this.onClassified = onClassified;
   }
 
-  async processMessage(messageId: string, gmail: GmailClient, accountEmail?: string): Promise<string | null> {
+  async processMessage(messageId: string, gmail: GmailClient, accountEmail: string): Promise<string | null> {
     if (await this.db.isProcessed(messageId)) {
       await this.logger.log({ messageId, accountEmail, stage: "message_skipped", level: "info", message: "Already processed (dedup)" });
       return null;
@@ -109,7 +109,7 @@ export class PubSubWorker {
       await this.logger.log({ messageId, accountEmail, stage: "labeled", level: "info", message: `Labeled as ${labelName} and removed from inbox` });
     }
 
-    await this.db.saveClassification({
+    const inserted = await this.db.saveClassification({
       messageId: email.messageId,
       historyId: email.historyId,
       sender: email.sender,
@@ -125,7 +125,7 @@ export class PubSubWorker {
 
     await this.logger.log({ messageId, accountEmail, stage: "saved", level: "info", message: "Classification persisted" });
 
-    if (accountEmail) {
+    if (inserted) {
       await this.db.incrementAccountStats(accountEmail, result.label);
     }
     this.onClassified?.(result.label);

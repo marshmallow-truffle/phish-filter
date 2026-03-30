@@ -118,7 +118,7 @@ export function createOAuthRoutes(
   <p>
     Status: <span class="status status-${dbHealth ? "healthy" : "degraded"}">${dbHealth ? "healthy" : "degraded"}</span>
     &nbsp; Uptime: ${Math.round(health.uptimeSeconds)}s
-    &nbsp; Total processed: ${dbHealth?.total_count ?? 0}
+    &nbsp; Total classified: ${dbHealth?.total_count ?? 0}
     ${health.lastError ? `&nbsp; Last error: ${health.lastError}` : ""}
   </p>
 
