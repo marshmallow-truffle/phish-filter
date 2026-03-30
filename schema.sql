@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS classifications (
     sender          TEXT,
     subject         TEXT,
     body_sent_to_llm TEXT,
-    label           TEXT NOT NULL CHECK (label IN ('phish', 'spam', 'benign')),
+    label           TEXT NOT NULL CHECK (label IN ('phish', 'spam', 'benign', 'failed')),
     confidence      REAL,
     reason          TEXT,
     quarantined     BOOLEAN DEFAULT FALSE,
@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     phish_count     INT DEFAULT 0,
     spam_count      INT DEFAULT 0,
     benign_count    INT DEFAULT 0,
+    failed_count    INT DEFAULT 0,
     last_processed_at TIMESTAMPTZ,
     added_at        TIMESTAMPTZ DEFAULT now()
 );
@@ -63,7 +64,7 @@ CREATE TABLE IF NOT EXISTS classification_rules (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     field       TEXT NOT NULL CHECK (field IN ('sender_domain', 'subject', 'body')),
     pattern     TEXT NOT NULL,
-    label       TEXT NOT NULL CHECK (label IN ('phish', 'spam', 'benign')),
+    label       TEXT NOT NULL CHECK (label IN ('phish', 'spam', 'benign', 'failed')),
     confidence  REAL NOT NULL DEFAULT 1.0,
     reason      TEXT NOT NULL,
     enabled     BOOLEAN DEFAULT TRUE,

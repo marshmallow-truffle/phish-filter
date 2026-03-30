@@ -4,6 +4,7 @@ import type { DatabasePort } from "./db.port.js";
 import type { AccountManager } from "./account-manager.js";
 import type { EventLogger } from "./event-logger.js";
 import { DEFAULT_CLASSIFICATION } from "./models.js";
+import { withRetry } from "./retry.js";
 
 export class PubSubWorker {
   private accountManager: AccountManager;
@@ -38,15 +39,18 @@ export class PubSubWorker {
 
     let result;
     try {
-      result = await this.classifier.classify({
-        sender: email.sender,
-        subject: email.subject,
-        body: email.body,
-        headers: email.rawHeaders,
-      }) ?? DEFAULT_CLASSIFICATION;
+      result = await withRetry(
+        () => this.classifier.classify({
+          sender: email.sender,
+          subject: email.subject,
+          body: email.body,
+          headers: email.rawHeaders,
+        }),
+        { maxRetries: 3, baseDelay: 1000 }
+      ) ?? DEFAULT_CLASSIFICATION;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      await this.logger.log({ messageId, accountEmail, stage: "classification_error", level: "error", message: `Classifier threw: ${errMsg}`, metadata: { error: errMsg } });
+      await this.logger.log({ messageId, accountEmail, stage: "classification_error", level: "error", message: `Classification failed after 3 retries: ${errMsg}`, metadata: { error: errMsg } });
       result = DEFAULT_CLASSIFICATION;
     }
 

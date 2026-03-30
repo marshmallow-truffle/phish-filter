@@ -42,6 +42,7 @@ export function createOAuthRoutes(
         <td>${a.phishCount}</td>
         <td>${a.spamCount}</td>
         <td>${a.benignCount}</td>
+        <td>${a.failedCount}</td>
         <td>${a.lastProcessedAt ? new Date(a.lastProcessedAt).toLocaleString() : "—"}</td>
         <td><form method="POST" action="/accounts/${encodeURIComponent(a.email)}/remove" style="margin:0" onsubmit="return confirm('Remove ${a.email}?')"><button type="submit" class="btn-remove">Remove</button></form></td>
       </tr>`)
@@ -98,6 +99,7 @@ export function createOAuthRoutes(
   .label-phish { color: #d93025; font-weight: bold; }
   .label-spam { color: #e37400; font-weight: bold; }
   .label-benign { color: #188038; }
+  .label-failed { color: #9e9e9e; font-style: italic; }
   .level-warn { color: #e37400; }
   .level-error { color: #d93025; font-weight: bold; }
   .status { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 13px; }
@@ -123,7 +125,7 @@ export function createOAuthRoutes(
   <h2>Monitored Accounts</h2>
   ${accounts.length > 0
     ? `<table>
-        <tr><th>Email</th><th>History ID</th><th>Processed</th><th>Phish</th><th>Spam</th><th>Benign</th><th>Last Processed</th><th></th></tr>
+        <tr><th>Email</th><th>History ID</th><th>Processed</th><th>Phish</th><th>Spam</th><th>Benign</th><th>Failed</th><th>Last Processed</th><th></th></tr>
         ${accountRows}
       </table>`
     : "<p>No accounts registered yet.</p>"}

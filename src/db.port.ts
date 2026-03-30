@@ -8,6 +8,7 @@ export interface Account {
   phishCount: number;
   spamCount: number;
   benignCount: number;
+  failedCount: number;
   lastProcessedAt: Date | null;
 }
 
@@ -30,6 +31,7 @@ export interface HealthStats {
   phish_count: number;
   spam_count: number;
   benign_count: number;
+  failed_count: number;
   total_count: number;
 }
 

@@ -2,7 +2,7 @@
 import { z } from "zod";
 
 export const ClassificationResultSchema = z.object({
-  label: z.enum(["phish", "spam", "benign"]),
+  label: z.enum(["phish", "spam", "benign", "failed"]),
   confidence: z.number().min(0).max(1),
   reason: z.string(),
 });
@@ -10,9 +10,9 @@ export const ClassificationResultSchema = z.object({
 export type ClassificationResult = z.infer<typeof ClassificationResultSchema>;
 
 export const DEFAULT_CLASSIFICATION: ClassificationResult = {
-  label: "benign",
+  label: "failed",
   confidence: 0,
-  reason: "No classifier produced a result",
+  reason: "Classification failed after retries",
 };
 
 export interface EmailMessage {
@@ -28,7 +28,7 @@ export interface ClassificationRule {
   id: string;
   field: "sender_domain" | "subject" | "body";
   pattern: string;
-  label: "phish" | "spam" | "benign";
+  label: "phish" | "spam" | "benign" | "failed";
   confidence: number;
   reason: string;
   enabled: boolean;

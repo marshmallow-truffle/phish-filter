@@ -115,7 +115,7 @@ describe("Classifier", () => {
       headers: {},
     });
 
-    expect(result.label).toBe("benign");
+    expect(result.label).toBe("failed");
     expect(result.confidence).toBe(0);
     expect(result.reason).toMatch(/Classification failed/);
   });

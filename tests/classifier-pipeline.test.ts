@@ -36,15 +36,14 @@ describe("ClassifierPipeline", () => {
     expect(second.classify).toHaveBeenCalledOnce();
   });
 
-  it("returns benign fallback when all classifiers return null", async () => {
+  it("returns failed fallback when all classifiers return null", async () => {
     const first = mockClassifier(null);
     const second = mockClassifier(null);
     const pipeline = new ClassifierPipeline([first, second]);
 
     const result = await pipeline.classify(input);
-    expect(result.label).toBe("benign");
+    expect(result.label).toBe("failed");
     expect(result.confidence).toBe(0);
-    expect(result.reason).toContain("No classifier produced a result");
   });
 
   it("runs classifiers in order, not parallel", async () => {

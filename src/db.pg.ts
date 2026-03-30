@@ -80,6 +80,7 @@ export class PgDatabase implements DatabasePort {
          (count(*) FILTER (WHERE label = 'phish'))::int AS phish_count,
          (count(*) FILTER (WHERE label = 'spam'))::int AS spam_count,
          (count(*) FILTER (WHERE label = 'benign'))::int AS benign_count,
+         (count(*) FILTER (WHERE label = 'failed'))::int AS failed_count,
          count(*)::int AS total_count
        FROM classifications`
     );
@@ -113,13 +114,14 @@ export class PgDatabase implements DatabasePort {
       phishCount: r.phish_count,
       spamCount: r.spam_count,
       benignCount: r.benign_count,
+      failedCount: r.failed_count,
       lastProcessedAt: r.last_processed_at,
     };
   }
 
   async getAccounts(): Promise<Account[]> {
     const res = await this.pool.query(
-      "SELECT email, refresh_token, last_history_id, total_processed, phish_count, spam_count, benign_count, last_processed_at FROM accounts"
+      "SELECT email, refresh_token, last_history_id, total_processed, phish_count, spam_count, benign_count, failed_count, last_processed_at FROM accounts"
     );
     return res.rows.map((r: any) => this.mapAccountRow(r));
   }
@@ -162,7 +164,8 @@ export class PgDatabase implements DatabasePort {
   }
 
   async incrementAccountStats(email: string, label: string): Promise<void> {
-    const col = label === "phish" ? "phish_count" : label === "spam" ? "spam_count" : "benign_count";
+    const colMap: Record<string, string> = { phish: "phish_count", spam: "spam_count", benign: "benign_count", failed: "failed_count" };
+    const col = colMap[label] ?? "failed_count";
     await this.pool.query(
       `UPDATE accounts SET total_processed = total_processed + 1, ${col} = ${col} + 1, last_processed_at = now() WHERE email = $1`,
       [email]

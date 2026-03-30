@@ -77,9 +77,9 @@ export class LlmClassifier implements ClassifierPort {
           continue;
         }
         console.error(`LLM classification failed after retry: ${err}`);
-        return { label: "benign", confidence: 0, reason: `Classification failed: ${err}` };
+        return { label: "failed", confidence: 0, reason: `Classification failed: ${err}` };
       }
     }
-    return { label: "benign", confidence: 0, reason: "Classification failed: unknown" };
+    return { label: "failed", confidence: 0, reason: "Classification failed: unknown" };
   }
 }

@@ -32,6 +32,7 @@ export function createApp(db: DatabasePort, health: ServiceHealth, extraRoutes?:
             phish_count: dbHealth.phish_count,
             spam_count: dbHealth.spam_count,
             benign_count: dbHealth.benign_count,
+            failed_count: dbHealth.failed_count,
           }
         : health.counts,
       last_error: health.lastError,
