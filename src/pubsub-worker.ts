@@ -87,9 +87,9 @@ export class PubSubWorker {
     await this.db.updateAccountHistoryId(emailAddress, String(historyId));
   }
 
-  async pullLoop(subscriptionName: string): Promise<void> {
+  async pullLoop(subscriptionName: string, projectId?: string): Promise<void> {
     const { PubSub } = await import("@google-cloud/pubsub");
-    const pubsub = new PubSub();
+    const pubsub = new PubSub({ projectId });
     const subscription = pubsub.subscription(subscriptionName);
     this.running = true;
     console.log(`Starting Pub/Sub pull loop on ${subscriptionName}`);

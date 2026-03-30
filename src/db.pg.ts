@@ -76,11 +76,11 @@ export class PgDatabase implements DatabasePort {
   async checkHealth(): Promise<HealthStats> {
     const res = await this.pool.query(
       `SELECT
-         count(*) FILTER (WHERE processed_at > now() - interval '1 hour') AS recent_count,
-         count(*) FILTER (WHERE label = 'phish') AS phish_count,
-         count(*) FILTER (WHERE label = 'spam') AS spam_count,
-         count(*) FILTER (WHERE label = 'benign') AS benign_count,
-         count(*) AS total_count
+         (count(*) FILTER (WHERE processed_at > now() - interval '1 hour'))::int AS recent_count,
+         (count(*) FILTER (WHERE label = 'phish'))::int AS phish_count,
+         (count(*) FILTER (WHERE label = 'spam'))::int AS spam_count,
+         (count(*) FILTER (WHERE label = 'benign'))::int AS benign_count,
+         count(*)::int AS total_count
        FROM classifications`
     );
     return res.rows[0];

@@ -124,7 +124,7 @@ async function main() {
   const worker = new PubSubWorker(accountManager, classifier, db, (label) => health.record(label));
 
   // 7. Start Pub/Sub pull
-  worker.pullLoop(config.PUBSUB_SUBSCRIPTION).catch((err) => {
+  worker.pullLoop(config.PUBSUB_SUBSCRIPTION, config.GCP_PROJECT_ID).catch((err) => {
     console.error("Pub/Sub pull loop crashed:", err);
     health.recordError(`Pull loop crashed: ${err}`);
   });
