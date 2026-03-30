@@ -1,18 +1,18 @@
 // src/pubsub-worker.ts
 import type { GmailClient } from "./gmail-client.js";
-import type { Classifier } from "./classifier.js";
+import type { ClassifierPort } from "./classifier.port.js";
 import type { DatabasePort } from "./db.port.js";
 
 export class PubSubWorker {
   private gmail: GmailClient;
-  private classifier: Classifier;
+  private classifier: ClassifierPort;
   private db: DatabasePort;
   private running = false;
   private onClassified?: (label: string) => void;
 
   constructor(
     gmail: GmailClient,
-    classifier: Classifier,
+    classifier: ClassifierPort,
     db: DatabasePort,
     onClassified?: (label: string) => void
   ) {
@@ -33,7 +33,7 @@ export class PubSubWorker {
       subject: email.subject,
       body: email.body,
       headers: email.rawHeaders,
-    });
+    }) ?? { label: "benign" as const, confidence: 0, reason: "No classifier produced a result" };
 
     let quarantined = false;
     if (result.label === "phish") {

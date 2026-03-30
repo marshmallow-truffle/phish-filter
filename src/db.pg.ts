@@ -6,6 +6,7 @@ import type {
   HealthStats,
   ClassificationRow,
 } from "./db.port.js";
+import type { ClassificationRule } from "./models.js";
 
 export class PgDatabase implements DatabasePort {
   private pool: pg.Pool;
@@ -81,6 +82,13 @@ export class PgDatabase implements DatabasePort {
        FROM classifications`
     );
     return res.rows[0];
+  }
+
+  async getRules(): Promise<ClassificationRule[]> {
+    const res = await this.pool.query(
+      "SELECT id, field, pattern, label, confidence, reason, enabled FROM classification_rules WHERE enabled = TRUE"
+    );
+    return res.rows;
   }
 
   async getRecentClassifications(limit = 20): Promise<ClassificationRow[]> {

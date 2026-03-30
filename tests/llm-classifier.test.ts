@@ -1,6 +1,5 @@
-// tests/classifier.test.ts
 import { describe, it, expect, vi } from "vitest";
-import { Classifier } from "../src/classifier.js";
+import { LlmClassifier } from "../src/llm-classifier.js";
 
 function mockAnthropicClient(responseText: string) {
   return {
@@ -21,7 +20,7 @@ describe("Classifier", () => {
         reason: "Sender domain mismatch",
       })
     );
-    const classifier = new Classifier(client, 5);
+    const classifier = new LlmClassifier(client, 5);
 
     const result = await classifier.classify({
       sender: "security@paypal-verify.ru",
@@ -53,7 +52,7 @@ describe("Classifier", () => {
           }),
       },
     } as any;
-    const classifier = new Classifier(client, 5);
+    const classifier = new LlmClassifier(client, 5);
 
     const result = await classifier.classify({
       sender: "test@example.com",
@@ -90,7 +89,7 @@ describe("Classifier", () => {
         }),
       },
     } as any;
-    const classifier = new Classifier(client, 2);
+    const classifier = new LlmClassifier(client, 2);
     await Promise.all(
       Array.from({ length: 6 }, () =>
         classifier.classify({ sender: "", subject: "", body: "", headers: {} })
@@ -107,7 +106,7 @@ describe("Classifier", () => {
           .mockResolvedValue({ content: [{ text: "garbage" }] }),
       },
     } as any;
-    const classifier = new Classifier(client, 5);
+    const classifier = new LlmClassifier(client, 5);
 
     const result = await classifier.classify({
       sender: "test@example.com",

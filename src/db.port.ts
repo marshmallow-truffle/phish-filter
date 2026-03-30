@@ -30,6 +30,8 @@ export interface ClassificationRow {
   processed_at: string;
 }
 
+import type { ClassificationRule } from "./models.js";
+
 export interface DatabasePort {
   runSchema(schemaPath?: string): Promise<void>;
   isProcessed(messageId: string): Promise<boolean>;
@@ -38,5 +40,6 @@ export interface DatabasePort {
   updateLastHistoryId(historyId: string): Promise<void>;
   checkHealth(): Promise<HealthStats>;
   getRecentClassifications(limit?: number): Promise<ClassificationRow[]>;
+  getRules(): Promise<ClassificationRule[]>;
   close(): Promise<void>;
 }

@@ -1,5 +1,5 @@
-// src/classifier.ts
 import { ClassificationResultSchema, type ClassificationResult } from "./models.js";
+import type { ClassifierPort, ClassifierInput } from "./classifier.port.js";
 
 const SYSTEM_PROMPT = `You are an email security classifier. Analyze the email and respond with ONLY a JSON object:
 {"label": "phish" | "spam" | "benign", "confidence": 0.0-1.0, "reason": "one sentence"}
@@ -11,7 +11,7 @@ Signals to consider:
 - Requests for credentials or payment
 - SPF/DKIM/DMARC results from headers (if available)`;
 
-export class Classifier {
+export class LlmClassifier implements ClassifierPort {
   private client: any;
   private concurrencyLimit: number;
   private model: string;
@@ -24,12 +24,7 @@ export class Classifier {
     this.model = model;
   }
 
-  async classify(input: {
-    sender: string;
-    subject: string;
-    body: string;
-    headers: Record<string, string>;
-  }): Promise<ClassificationResult> {
+  async classify(input: ClassifierInput): Promise<ClassificationResult> {
     await this.acquire();
     try {
       return await this.classifyInner(input);
@@ -56,12 +51,7 @@ export class Classifier {
     }
   }
 
-  private async classifyInner(input: {
-    sender: string;
-    subject: string;
-    body: string;
-    headers: Record<string, string>;
-  }): Promise<ClassificationResult> {
+  private async classifyInner(input: ClassifierInput): Promise<ClassificationResult> {
     let userMessage =
       `From: ${input.sender}\n` +
       `Subject: ${input.subject}\n` +

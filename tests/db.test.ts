@@ -65,6 +65,20 @@ describe("PgDatabase", () => {
     expect(params[0]).toBe("m1");
   });
 
+  it("getRules returns enabled rules", async () => {
+    pool.query.mockResolvedValueOnce({
+      rows: [
+        { id: "r1", field: "sender_domain", pattern: "evil.com", label: "phish", confidence: 1.0, reason: "Known bad domain", enabled: true },
+      ],
+    });
+    const rules = await db.getRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].field).toBe("sender_domain");
+    expect(rules[0].pattern).toBe("evil.com");
+    const [sql] = pool.query.mock.calls[0];
+    expect(sql).toContain("WHERE enabled = TRUE");
+  });
+
   it("implements DatabasePort interface", () => {
     const port: DatabasePort = db;
     expect(port.isProcessed).toBeTypeOf("function");
@@ -73,6 +87,7 @@ describe("PgDatabase", () => {
     expect(port.updateLastHistoryId).toBeTypeOf("function");
     expect(port.checkHealth).toBeTypeOf("function");
     expect(port.getRecentClassifications).toBeTypeOf("function");
+    expect(port.getRules).toBeTypeOf("function");
     expect(port.close).toBeTypeOf("function");
   });
 });

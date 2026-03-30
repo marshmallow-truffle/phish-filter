@@ -23,3 +23,14 @@ CREATE TABLE IF NOT EXISTS system_state (
 
 INSERT INTO system_state (key, value) VALUES ('last_history_id', '0')
     ON CONFLICT (key) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS classification_rules (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    field       TEXT NOT NULL CHECK (field IN ('sender_domain', 'subject', 'body')),
+    pattern     TEXT NOT NULL,
+    label       TEXT NOT NULL CHECK (label IN ('phish', 'spam', 'benign')),
+    confidence  REAL NOT NULL DEFAULT 1.0,
+    reason      TEXT NOT NULL,
+    enabled     BOOLEAN DEFAULT TRUE,
+    created_at  TIMESTAMPTZ DEFAULT now()
+);

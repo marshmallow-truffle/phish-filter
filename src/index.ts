@@ -56,7 +56,9 @@ async function main() {
   const Anthropic = (await import("@anthropic-ai/sdk")).default;
   const { CredentialManager } = await import("./credentials.js");
   const { GmailClient } = await import("./gmail-client.js");
-  const { Classifier } = await import("./classifier.js");
+  const { LlmClassifier } = await import("./llm-classifier.js");
+  const { RuleBasedClassifier } = await import("./rule-classifier.js");
+  const { ClassifierPipeline } = await import("./classifier-pipeline.js");
   const { PgDatabase } = await import("./db.pg.js");
   const { PubSubWorker } = await import("./pubsub-worker.js");
 
@@ -83,9 +85,11 @@ async function main() {
   // 3. Set up custom quarantine label (non-destructive, not TRASH)
   await gmail.setupQuarantineLabel();
 
-  // 4. Set up LLM classifier with concurrency limit
+  // 4. Set up classifier pipeline: rules first, LLM fallback
   const anthropic = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
-  const classifier = new Classifier(anthropic, config.LLM_MAX_CONCURRENT, config.LLM_MODEL);
+  const llmClassifier = new LlmClassifier(anthropic, config.LLM_MAX_CONCURRENT, config.LLM_MODEL);
+  const ruleClassifier = new RuleBasedClassifier(db);
+  const classifier = new ClassifierPipeline([ruleClassifier, llmClassifier]);
 
   // 5. Create worker (with health callback to track in-memory stats)
   const worker = new PubSubWorker(gmail, classifier, db, (label) => health.record(label));

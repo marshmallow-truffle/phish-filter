@@ -18,6 +18,16 @@ export interface EmailMessage {
   rawHeaders: Record<string, string>;
 }
 
+export interface ClassificationRule {
+  id: string;
+  field: "sender_domain" | "subject" | "body";
+  pattern: string;
+  label: "phish" | "spam" | "benign";
+  confidence: number;
+  reason: string;
+  enabled: boolean;
+}
+
 export interface ClassificationRecord {
   messageId: string;
   historyId: string | null;
