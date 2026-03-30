@@ -12,13 +12,6 @@ CREATE TABLE IF NOT EXISTS classifications (
 CREATE INDEX IF NOT EXISTS idx_classifications_label ON classifications(label);
 CREATE INDEX IF NOT EXISTS idx_classifications_processed_at ON classifications(processed_at);
 
-CREATE TABLE IF NOT EXISTS system_state (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-
-INSERT INTO system_state (key, value) VALUES ('last_history_id', '0')
-    ON CONFLICT (key) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS accounts (
     email           TEXT PRIMARY KEY,
@@ -32,7 +25,6 @@ CREATE TABLE IF NOT EXISTS accounts (
     last_processed_at TIMESTAMPTZ,
     added_at        TIMESTAMPTZ DEFAULT now()
 );
-
 
 CREATE TABLE IF NOT EXISTS events (
     message_id    TEXT NOT NULL,

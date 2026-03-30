@@ -46,8 +46,7 @@ export interface DatabasePort {
   runSchema(schemaPath?: string): Promise<void>;
   isProcessed(messageId: string): Promise<boolean>;
   saveClassification(record: SaveClassificationInput): Promise<boolean>;
-  getLastHistoryId(): Promise<string>;
-  updateLastHistoryId(historyId: string): Promise<void>;
+
   checkHealth(): Promise<HealthStats>;
   getRecentClassifications(limit?: number): Promise<ClassificationRow[]>;
   getRules(): Promise<ClassificationRule[]>;

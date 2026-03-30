@@ -28,16 +28,6 @@ describe("PgDatabase", () => {
     expect(await db.isProcessed("msg1")).toBe(true);
   });
 
-  it("getLastHistoryId returns string value", async () => {
-    pool.query.mockResolvedValueOnce({ rows: [{ value: "12345" }] });
-    const result = await db.getLastHistoryId();
-    expect(result).toBe("12345");
-  });
-
-  it("getLastHistoryId returns '0' when no row", async () => {
-    pool.query.mockResolvedValueOnce({ rows: [] });
-    expect(await db.getLastHistoryId()).toBe("0");
-  });
 
   it("checkHealth returns classification counts", async () => {
     pool.query.mockResolvedValueOnce({
@@ -150,8 +140,7 @@ describe("PgDatabase", () => {
     const port: DatabasePort = db;
     expect(port.isProcessed).toBeTypeOf("function");
     expect(port.saveClassification).toBeTypeOf("function");
-    expect(port.getLastHistoryId).toBeTypeOf("function");
-    expect(port.updateLastHistoryId).toBeTypeOf("function");
+
     expect(port.checkHealth).toBeTypeOf("function");
     expect(port.getRecentClassifications).toBeTypeOf("function");
     expect(port.getRules).toBeTypeOf("function");

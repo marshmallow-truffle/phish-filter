@@ -54,19 +54,6 @@ export class PgDatabase implements DatabasePort {
     return (res.rowCount ?? 0) > 0;
   }
 
-  async getLastHistoryId(): Promise<string> {
-    const res = await this.pool.query(
-      "SELECT value FROM system_state WHERE key = 'last_history_id'"
-    );
-    return res.rows[0]?.value ?? "0";
-  }
-
-  async updateLastHistoryId(historyId: string): Promise<void> {
-    await this.pool.query(
-      "UPDATE system_state SET value = $1 WHERE key = 'last_history_id'",
-      [historyId]
-    );
-  }
 
   async checkHealth(): Promise<HealthStats> {
     const res = await this.pool.query(
