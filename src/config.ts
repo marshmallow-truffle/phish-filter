@@ -10,7 +10,7 @@ const ConfigSchema = z.object({
   PUBSUB_TOPIC: z.string().default("email-notifications"),
   PUBSUB_SUBSCRIPTION: z.string().default("email-worker-sub"),
   ANTHROPIC_API_KEY: z.string(),
-  LLM_MODEL: z.string().default("claude-sonnet-4-20250514"),
+  LLM_MODEL: z.string().default("claude-3-5-haiku-20241022"),
   LLM_MAX_CONCURRENT: z.coerce.number().default(5),
   QUARANTINE_LABEL_NAME: z.string().default("PHISH_QUARANTINE"),
   MAX_BODY_LENGTH: z.coerce.number().default(2000),
