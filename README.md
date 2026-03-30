@@ -8,38 +8,11 @@ Gmail → GCP Pub/Sub → Worker (Hono) → Classify (rules + LLM) → Label in 
 
 ### Reliability: every email gets processed
 
-Three mechanisms work together to guarantee no email is missed, even across crashes and restarts:
+Each Gmail account has a **serial processing queue**. Pub/Sub notifications are enqueued and processed one at a time — read cursor, fetch messages via `history.list`, classify, update cursor. No concurrent access to the cursor means no race conditions.
 
-**1. Per-account serial queue.** Each Gmail account gets its own notification queue with a single processing loop. Pub/Sub notifications are enqueued immediately (non-blocking) and processed one at a time per account. This eliminates race conditions — the read cursor → fetch messages → process → update cursor sequence is atomic per account, while different accounts process concurrently.
+The cursor advances to the **highest historyId of successfully processed messages**, not the notification's. On crash, unprocessed messages are replayed from the last saved cursor. On startup, the same loop runs catch-up — no separate code path.
 
-**2. History cursor tracks processed messages, not notifications.** After processing a batch of messages, the cursor advances to the highest `historyId` of successfully processed messages — not the notification's historyId. If the server crashes mid-batch, the cursor reflects only what was actually completed. On restart, `history.list(cursor)` picks up from exactly where processing stopped.
-
-**3. Catch-up on startup uses the same code path.** On startup, each account receives a synthetic notification pushed to its queue. The same loop calls `history.list(last_cursor)`, processes any missed messages, and advances the cursor. There is no separate catch-up code — live processing and crash recovery are identical.
-
-**Dedup guarantees idempotency.** The `classifications` table has a `UNIQUE(message_id)` primary key with `ON CONFLICT DO NOTHING`. If a message is re-fetched (due to overlapping history ranges or Pub/Sub redelivery), it's silently skipped. The cursor only advances past it.
-
-**Pub/Sub ack/nack.** Notifications are only acknowledged after the full batch succeeds. If processing throws, the notification is nacked and Pub/Sub redelivers it after the ack deadline (60s). The dedup check skips any messages that were already processed before the failure.
-
-```
-Startup:
-  for each account → push synthetic notification to queue
-
-Live:
-  Pub/Sub notification → enqueue(emailAddress, ack, nack)
-
-Per-account loop (serial):
-  take notification from queue
-  read cursor from DB
-  history.list(cursor) → message IDs
-  for each message:
-    dedup check → skip if already in DB
-    fetch from Gmail → classify → label → save to DB
-    track max historyId
-  update cursor to max historyId
-  ack notification
-```
-
-The service can be down for hours. On restart, every missed email is processed without duplication.
+**Dedup** (`message_id` primary key, `ON CONFLICT DO NOTHING`) ensures re-fetched messages are silently skipped. **Pub/Sub ack** happens only after the full batch succeeds; failures trigger nack and redelivery.
 
 ### Database isolation
 
