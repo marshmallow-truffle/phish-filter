@@ -1,33 +1,10 @@
-# Email Classifier
+# Phish Filter
 
-Real-time email classification service that watches a Gmail inbox, classifies incoming messages as phishing/spam/benign using an LLM, and quarantines phishing emails automatically.
-
-## Architecture
+Real-time email classification service. Watches Gmail inboxes via GCP Pub/Sub, classifies emails using configurable rules and an LLM, and labels phishing/spam in Gmail automatically. Handles multiple accounts, survives crashes without losing emails, and provides a web dashboard for monitoring.
 
 ```
-┌─────────────┐    watch()     ┌──────────────┐
-│  Gmail API  │ ──────────────>│ GCP Pub/Sub  │
-└─────────────┘                │   (topic)    │
-                               └──────┬───────┘
-                                      │ pull subscription
-                                      ▼
-                              ┌───────────────┐
-                              │  Worker Svc   │
-                              │  (Hono)       │
-                              └───┬───┬───┬───┘
-                                  │   │   │
-                    ┌─────────────┘   │   └─────────────┐
-                    ▼                 ▼                  ▼
-             ┌────────────┐   ┌────────────┐   ┌───────────────┐
-             │ Gmail API  │   │  LLM API   │   │  PostgreSQL   │
-             │ (fetch +   │   │ (classify) │   │  (persist)    │
-             │ quarantine)│   └────────────┘   └───────────────┘
-             └────────────┘
+Gmail → GCP Pub/Sub → Worker (Hono) → Classify (rules + LLM) → Label in Gmail + Store in Postgres
 ```
-
-### Why Pub/Sub over polling?
-
-Event-driven, fault-tolerant, zero data loss during downtime. Gmail pushes change notifications to a Pub/Sub topic; the service pulls from a subscription at its own pace, giving natural backpressure control.
 
 ### Reliability: every email gets processed
 
