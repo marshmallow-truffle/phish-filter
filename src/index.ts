@@ -92,37 +92,11 @@ async function main() {
   };
   const accountManager = new AccountManager(db, gmailConfig, oauthConfig);
 
-  // 4. Load all accounts from DB
+  // 4. Load all accounts from DB (add accounts via web UI at /)
   await accountManager.loadAll();
   console.log(`Loaded ${accountManager.emails().length} accounts from DB`);
 
-  // 5. If env-var refresh token set, register it as an account
-  if (config.GOOGLE_REFRESH_TOKEN && !accountManager.has(config.GOOGLE_REFRESH_TOKEN)) {
-    try {
-      // Discover email by creating a temporary Gmail client
-      const { CredentialManager } = await import("./credentials.js");
-      const { google } = await import("googleapis");
-      const cred = new CredentialManager({
-        clientId: config.GOOGLE_CLIENT_ID,
-        clientSecret: config.GOOGLE_CLIENT_SECRET,
-        refreshToken: config.GOOGLE_REFRESH_TOKEN,
-      });
-      const gmailService = google.gmail({ version: "v1", auth: cred.getAuth() });
-      const profile = await gmailService.users.getProfile({ userId: "me" });
-      const email = profile.data.emailAddress!;
-
-      if (!accountManager.has(email)) {
-        await db.upsertAccount(email, config.GOOGLE_REFRESH_TOKEN);
-        await accountManager.register(email, config.GOOGLE_REFRESH_TOKEN);
-        console.log(`Registered env-var account: ${email}`);
-      }
-    } catch (err) {
-      console.error("Failed to register env-var account:", err);
-      health.recordError(`Env account registration failed: ${err}`);
-    }
-  }
-
-  // 6. Create event logger and worker
+  // 5. Create event logger and worker
   const { EventLogger } = await import("./event-logger.js");
   const logger = new EventLogger(db);
   const worker = new PubSubWorker(accountManager, classifier, db, logger, {
@@ -131,12 +105,12 @@ async function main() {
     maxMessagesPerBatch: config.MAX_MESSAGES_PER_BATCH,
   }, (label) => health.record(label));
 
-  // 7. Trigger catch-up for all registered accounts
+  // 6. Trigger catch-up for all registered accounts
   for (const email of accountManager.emails()) {
     worker.triggerCatchUp(email);
   }
 
-  // 8. Start Pub/Sub pull
+  // 7. Start Pub/Sub pull
   worker.pullLoop(config.PUBSUB_SUBSCRIPTION, config.GCP_PROJECT_ID).catch((err) => {
     console.error("Pub/Sub pull loop crashed:", err);
     health.recordError(`Pull loop crashed: ${err}`);

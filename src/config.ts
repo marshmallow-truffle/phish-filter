@@ -5,7 +5,7 @@ const ConfigSchema = z.object({
   DATABASE_URL: z.string(),
   GOOGLE_CLIENT_ID: z.string(),
   GOOGLE_CLIENT_SECRET: z.string(),
-  GOOGLE_REFRESH_TOKEN: z.string().optional(),
+
   GCP_PROJECT_ID: z.string(),
   PUBSUB_TOPIC: z.string().default("email-notifications"),
   PUBSUB_SUBSCRIPTION: z.string().default("email-worker-sub"),

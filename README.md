@@ -53,7 +53,7 @@ Custom Gmail labels are used instead of Trash so labeled messages are visible in
 
 ### Web dashboard
 
-Visit `http://localhost:8080/` — the single-page dashboard shows:
+Visit `http://localhost:8080/` — the dashboard shows:
 
 - **Health status** — uptime, DB connectivity, total processed
 - **Monitored accounts** — per-account stats (processed, phish, spam, benign, failed) with add/remove
@@ -72,7 +72,7 @@ GET /events?message_id=...           → event trace for a specific email
 
 ### Send a test email
 
-Forward or send any email to the monitored Gmail account, or use the test script:
+Forward or send any email to a monitored Gmail account, or use the test script:
 
 ```bash
 npx tsx scripts/send-test-email.ts \
@@ -156,7 +156,7 @@ GCP_PROJECT_ID=your-gcp-project-id
 ANTHROPIC_API_KEY=sk-ant-...
 
 # Optional (shown with defaults)
-GOOGLE_REFRESH_TOKEN=                  # not needed — add accounts via web UI instead
+
 PUBSUB_TOPIC=email-notifications
 PUBSUB_SUBSCRIPTION=email-worker-sub
 LLM_MODEL=claude-haiku-4-5-20251001
