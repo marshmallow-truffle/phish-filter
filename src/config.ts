@@ -5,7 +5,7 @@ const ConfigSchema = z.object({
   DATABASE_URL: z.string(),
   GOOGLE_CLIENT_ID: z.string(),
   GOOGLE_CLIENT_SECRET: z.string(),
-  GOOGLE_REFRESH_TOKEN: z.string(),
+  GOOGLE_REFRESH_TOKEN: z.string().optional(),
   GCP_PROJECT_ID: z.string(),
   PUBSUB_TOPIC: z.string().default("email-notifications"),
   PUBSUB_SUBSCRIPTION: z.string().default("email-worker-sub"),
@@ -14,6 +14,7 @@ const ConfigSchema = z.object({
   LLM_MAX_CONCURRENT: z.coerce.number().default(5),
   QUARANTINE_LABEL_NAME: z.string().default("PHISH_QUARANTINE"),
   MAX_BODY_LENGTH: z.coerce.number().default(2000),
+  OAUTH_REDIRECT_URI: z.string().default("http://localhost:8080/oauth/callback"),
   PORT: z.coerce.number().default(8080),
 });
 

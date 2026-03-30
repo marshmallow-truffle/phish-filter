@@ -1,33 +1,34 @@
 import type { GmailClient } from "./gmail-client.js";
 import type { ClassifierPort } from "./classifier.port.js";
 import type { DatabasePort } from "./db.port.js";
+import type { AccountManager } from "./account-manager.js";
 import { DEFAULT_CLASSIFICATION } from "./models.js";
 
 export class PubSubWorker {
-  private gmail: GmailClient;
+  private accountManager: AccountManager;
   private classifier: ClassifierPort;
   private db: DatabasePort;
   private running = false;
   private onClassified?: (label: string) => void;
 
   constructor(
-    gmail: GmailClient,
+    accountManager: AccountManager,
     classifier: ClassifierPort,
     db: DatabasePort,
     onClassified?: (label: string) => void
   ) {
-    this.gmail = gmail;
+    this.accountManager = accountManager;
     this.classifier = classifier;
     this.db = db;
     this.onClassified = onClassified;
   }
 
-  async processMessage(messageId: string): Promise<boolean> {
+  async processMessage(messageId: string, gmail: GmailClient, accountEmail?: string): Promise<boolean> {
     if (await this.db.isProcessed(messageId)) {
       return false;
     }
 
-    const email = await this.gmail.getMessage(messageId);
+    const email = await gmail.getMessage(messageId);
     const result = await this.classifier.classify({
       sender: email.sender,
       subject: email.subject,
@@ -37,7 +38,7 @@ export class PubSubWorker {
 
     let quarantined = false;
     if (result.label === "phish") {
-      await this.gmail.quarantineMessage(messageId);
+      await gmail.quarantineMessage(messageId);
       quarantined = true;
     }
 
@@ -52,6 +53,7 @@ export class PubSubWorker {
       reason: result.reason,
       quarantined,
       rawHeaders: email.rawHeaders,
+      accountEmail,
     });
 
     this.onClassified?.(result.label);
@@ -63,45 +65,29 @@ export class PubSubWorker {
 
   async processNotification(data: Buffer): Promise<void> {
     const payload = JSON.parse(data.toString());
-    const historyId: string | undefined = payload.historyId;
-    if (!historyId) {
-      console.warn("Pub/Sub message missing historyId:", payload);
+    const { emailAddress, historyId } = payload;
+    if (!historyId || !emailAddress) {
+      console.warn("Pub/Sub message missing historyId or emailAddress:", payload);
       return;
     }
 
-    const lastHistoryId = await this.db.getLastHistoryId();
-    const messageIds = await this.gmail.getHistory(lastHistoryId);
+    const gmail = this.accountManager.get(emailAddress);
+    if (!gmail) {
+      console.warn(`No registered account for ${emailAddress}, ignoring`);
+      return;
+    }
+
+    const lastHistoryId = await this.db.getAccountHistoryId(emailAddress);
+    const messageIds = await gmail.getHistory(lastHistoryId);
 
     for (const msgId of messageIds) {
-      await this.processMessage(msgId);
+      await this.processMessage(msgId, gmail, emailAddress);
     }
 
-    await this.db.updateLastHistoryId(String(historyId));
-  }
-
-  async catchUp(): Promise<number> {
-    const lastHistoryId = await this.db.getLastHistoryId();
-    console.log(`Catching up from history ID: ${lastHistoryId}`);
-
-    const messageIds = await this.gmail.getHistory(lastHistoryId);
-    let processed = 0;
-    for (const msgId of messageIds) {
-      if (await this.processMessage(msgId)) {
-        processed++;
-      }
-    }
-
-    if (messageIds.length > 0) {
-      const watchResult = await this.gmail.watch();
-      await this.db.updateLastHistoryId(watchResult.historyId);
-    }
-
-    console.log(`Catch-up complete: ${processed} messages processed`);
-    return processed;
+    await this.db.updateAccountHistoryId(emailAddress, String(historyId));
   }
 
   async pullLoop(subscriptionName: string): Promise<void> {
-    // Lazy import to avoid loading @google-cloud/pubsub in tests
     const { PubSub } = await import("@google-cloud/pubsub");
     const pubsub = new PubSub();
     const subscription = pubsub.subscription(subscriptionName);

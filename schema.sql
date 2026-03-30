@@ -24,6 +24,25 @@ CREATE TABLE IF NOT EXISTS system_state (
 INSERT INTO system_state (key, value) VALUES ('last_history_id', '0')
     ON CONFLICT (key) DO NOTHING;
 
+CREATE TABLE IF NOT EXISTS accounts (
+    email           TEXT PRIMARY KEY,
+    refresh_token   TEXT NOT NULL,
+    last_history_id TEXT NOT NULL DEFAULT '0',
+    watch_expiration TIMESTAMPTZ,
+    added_at        TIMESTAMPTZ DEFAULT now()
+);
+
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'classifications' AND column_name = 'account_email'
+  ) THEN
+    ALTER TABLE classifications ADD COLUMN account_email TEXT;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_classifications_account ON classifications(account_email);
+
 CREATE TABLE IF NOT EXISTS classification_rules (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     field       TEXT NOT NULL CHECK (field IN ('sender_domain', 'subject', 'body')),

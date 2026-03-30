@@ -1,4 +1,3 @@
-// tests/pipeline.test.ts
 import { describe, it, expect, vi } from "vitest";
 import { PubSubWorker } from "../src/pubsub-worker.js";
 import { parseEmailMessage } from "../src/gmail-client.js";
@@ -28,27 +27,24 @@ function makeRawMessage(
 }
 
 function makeMocks(classifyResult: { label: string; confidence: number; reason: string }) {
-  return {
-    gmail: {
-      getHistory: vi.fn().mockResolvedValue(["msg1", "msg2"]),
-      getMessage: vi.fn().mockImplementation((id: string) =>
-        Promise.resolve(
-          parseEmailMessage(
-            makeRawMessage(id, "phisher@evil.ru", "Urgent!", "Click http://evil.ru/steal")
-          )
+  const gmail = {
+    getHistory: vi.fn().mockResolvedValue(["msg1", "msg2"]),
+    getMessage: vi.fn().mockImplementation((id: string) =>
+      Promise.resolve(
+        parseEmailMessage(
+          makeRawMessage(id, "phisher@evil.ru", "Urgent!", "Click http://evil.ru/steal")
         )
-      ),
-      quarantineMessage: vi.fn().mockResolvedValue(undefined),
-      watch: vi.fn().mockResolvedValue({ historyId: "200", expiration: "9999" }),
-    },
-    classifier: {
-      classify: vi.fn().mockResolvedValue(classifyResult),
-    },
+      )
+    ),
+    quarantineMessage: vi.fn().mockResolvedValue(undefined),
+  };
+  return {
+    gmail,
+    accountManager: { get: vi.fn().mockReturnValue(gmail) },
+    classifier: { classify: vi.fn().mockResolvedValue(classifyResult) },
     db: {
       isProcessed: vi.fn().mockResolvedValue(false),
       saveClassification: vi.fn().mockResolvedValue(true),
-      getLastHistoryId: vi.fn().mockResolvedValue("50"),
-      updateLastHistoryId: vi.fn().mockResolvedValue(undefined),
     },
   };
 }
@@ -61,12 +57,12 @@ describe("Pipeline end-to-end", () => {
       reason: "Suspicious URL",
     });
     const worker = new PubSubWorker(
-      mocks.gmail as any,
+      mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any
     );
 
-    const result = await worker.processMessage("msg1");
+    const result = await worker.processMessage("msg1", mocks.gmail as any);
     expect(result).toBe(true);
 
     expect(mocks.gmail.getMessage).toHaveBeenCalledWith("msg1");
@@ -74,7 +70,6 @@ describe("Pipeline end-to-end", () => {
     expect(mocks.gmail.quarantineMessage).toHaveBeenCalledWith("msg1");
     expect(mocks.db.saveClassification).toHaveBeenCalledOnce();
 
-    // Verify body_sent_to_llm contains actual email content
     const saveCall = mocks.db.saveClassification.mock.calls[0][0];
     expect(saveCall.bodySentToLlm).toContain("evil.ru/steal");
     expect(saveCall.quarantined).toBe(true);
@@ -88,12 +83,12 @@ describe("Pipeline end-to-end", () => {
     });
     mocks.db.isProcessed.mockResolvedValue(true);
     const worker = new PubSubWorker(
-      mocks.gmail as any,
+      mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any
     );
 
-    const result = await worker.processMessage("msg1");
+    const result = await worker.processMessage("msg1", mocks.gmail as any);
     expect(result).toBe(false);
     expect(mocks.gmail.getMessage).not.toHaveBeenCalled();
     expect(mocks.classifier.classify).not.toHaveBeenCalled();
@@ -106,12 +101,12 @@ describe("Pipeline end-to-end", () => {
       reason: "Normal email",
     });
     const worker = new PubSubWorker(
-      mocks.gmail as any,
+      mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any
     );
 
-    await worker.processMessage("msg1");
+    await worker.processMessage("msg1", mocks.gmail as any);
     expect(mocks.gmail.quarantineMessage).not.toHaveBeenCalled();
     const saveCall = mocks.db.saveClassification.mock.calls[0][0];
     expect(saveCall.quarantined).toBe(false);

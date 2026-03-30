@@ -3,8 +3,12 @@ import type { DatabasePort } from "./db.port.js";
 import { ServiceHealth } from "./health.js";
 
 // Exported for testability — endpoints only depend on DatabasePort + health
-export function createApp(db: DatabasePort, health: ServiceHealth) {
+export function createApp(db: DatabasePort, health: ServiceHealth, extraRoutes?: Hono) {
   const app = new Hono();
+
+  if (extraRoutes) {
+    app.route("/", extraRoutes);
+  }
 
   app.get("/health", async (c) => {
     let dbHealth: any = {};
@@ -50,17 +54,16 @@ export function createApp(db: DatabasePort, health: ServiceHealth) {
 
 // Production startup — only runs when executed directly
 async function main() {
-  // Lazy import config to avoid throwing in test environments
   const { config } = await import("./config.js");
   const { serve } = await import("@hono/node-server");
   const Anthropic = (await import("@anthropic-ai/sdk")).default;
-  const { CredentialManager } = await import("./credentials.js");
-  const { GmailClient } = await import("./gmail-client.js");
   const { LlmClassifier } = await import("./llm-classifier.js");
   const { RuleBasedClassifier } = await import("./rule-classifier.js");
   const { ClassifierPipeline } = await import("./classifier-pipeline.js");
   const { PgDatabase } = await import("./db.pg.js");
   const { PubSubWorker } = await import("./pubsub-worker.js");
+  const { AccountManager } = await import("./account-manager.js");
+  const { createOAuthRoutes } = await import("./oauth-routes.js");
 
   const db = new PgDatabase();
   const health = new ServiceHealth();
@@ -69,60 +72,72 @@ async function main() {
   await db.runSchema();
   console.log("Database connected and schema applied");
 
-  // 2. Set up credentials and Gmail client
-  const credManager = new CredentialManager({
-    clientId: config.GOOGLE_CLIENT_ID,
-    clientSecret: config.GOOGLE_CLIENT_SECRET,
-    refreshToken: config.GOOGLE_REFRESH_TOKEN,
-  });
-  const gmailService = credManager.getGmailService();
-  const gmail = new GmailClient(gmailService, {
-    gcpProjectId: config.GCP_PROJECT_ID,
-    pubsubTopic: config.PUBSUB_TOPIC,
-    quarantineLabelName: config.QUARANTINE_LABEL_NAME,
-  });
-
-  // 3. Set up custom quarantine label (non-destructive, not TRASH)
-  await gmail.setupQuarantineLabel();
-
-  // 4. Set up classifier pipeline: rules first, LLM fallback
+  // 2. Set up classifier pipeline: rules first, LLM fallback
   const anthropic = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
   const llmClassifier = new LlmClassifier(anthropic, config.LLM_MAX_CONCURRENT, config.LLM_MODEL);
   const ruleClassifier = new RuleBasedClassifier(db);
   const classifier = new ClassifierPipeline([ruleClassifier, llmClassifier]);
 
-  // 5. Create worker (with health callback to track in-memory stats)
-  const worker = new PubSubWorker(gmail, classifier, db, (label) => health.record(label));
+  // 3. Set up account manager
+  const gmailConfig = {
+    gcpProjectId: config.GCP_PROJECT_ID,
+    pubsubTopic: config.PUBSUB_TOPIC,
+    quarantineLabelName: config.QUARANTINE_LABEL_NAME,
+  };
+  const oauthConfig = {
+    clientId: config.GOOGLE_CLIENT_ID,
+    clientSecret: config.GOOGLE_CLIENT_SECRET,
+  };
+  const accountManager = new AccountManager(db, gmailConfig, oauthConfig);
 
-  // 6. Start Pub/Sub pull BEFORE catch-up (buffer messages during replay).
-  //    Dedup via ON CONFLICT handles any overlap between catch-up and live messages.
+  // 4. Load all accounts from DB
+  await accountManager.loadAll();
+  console.log(`Loaded ${accountManager.emails().length} accounts from DB`);
+
+  // 5. If env-var refresh token set, register it as an account
+  if (config.GOOGLE_REFRESH_TOKEN && !accountManager.has(config.GOOGLE_REFRESH_TOKEN)) {
+    try {
+      // Discover email by creating a temporary Gmail client
+      const { CredentialManager } = await import("./credentials.js");
+      const { google } = await import("googleapis");
+      const cred = new CredentialManager({
+        clientId: config.GOOGLE_CLIENT_ID,
+        clientSecret: config.GOOGLE_CLIENT_SECRET,
+        refreshToken: config.GOOGLE_REFRESH_TOKEN,
+      });
+      const gmailService = google.gmail({ version: "v1", auth: cred.getAuth() });
+      const profile = await gmailService.users.getProfile({ userId: "me" });
+      const email = profile.data.emailAddress!;
+
+      if (!accountManager.has(email)) {
+        await db.upsertAccount(email, config.GOOGLE_REFRESH_TOKEN);
+        await accountManager.register(email, config.GOOGLE_REFRESH_TOKEN);
+        console.log(`Registered env-var account: ${email}`);
+      }
+    } catch (err) {
+      console.error("Failed to register env-var account:", err);
+      health.recordError(`Env account registration failed: ${err}`);
+    }
+  }
+
+  // 6. Create worker with account manager
+  const worker = new PubSubWorker(accountManager, classifier, db, (label) => health.record(label));
+
+  // 7. Start Pub/Sub pull
   worker.pullLoop(config.PUBSUB_SUBSCRIPTION).catch((err) => {
     console.error("Pub/Sub pull loop crashed:", err);
     health.recordError(`Pull loop crashed: ${err}`);
   });
 
-  // 7. Catch up on missed messages since last known history ID
-  try {
-    const processed = await worker.catchUp();
-    console.log(`Startup catch-up: ${processed} messages processed`);
-  } catch (err) {
-    console.error("Catch-up failed (will rely on Pub/Sub redelivery):", err);
-    health.recordError(`Catch-up failed: ${err}`);
-  }
-
-  // 8. Establish Gmail watch (renews Pub/Sub push notifications)
-  try {
-    const watchResult = await gmail.watch();
-    console.log(`Gmail watch active until ${watchResult.expiration}`);
-  } catch (err) {
-    console.error("Failed to establish Gmail watch:", err);
-    health.recordError(`Watch failed: ${err}`);
-  }
-
-  // 9. Start HTTP server
-  const app = createApp(db, health);
+  // 8. Start HTTP server with OAuth routes
+  const oauthRoutes = createOAuthRoutes(accountManager, db, {
+    ...oauthConfig,
+    redirectUri: config.OAUTH_REDIRECT_URI,
+  });
+  const app = createApp(db, health, oauthRoutes);
   serve({ fetch: app.fetch, port: config.PORT }, (info) => {
     console.log(`Server running on port ${info.port} — steady state`);
+    console.log(`Add Gmail accounts at http://localhost:${info.port}/`);
   });
 
   // Graceful shutdown
@@ -134,7 +149,6 @@ async function main() {
   });
 }
 
-// Only run main() when executed directly (not imported for tests)
 const isDirectRun =
   process.argv[1]?.endsWith("index.js") ||
   process.argv[1]?.endsWith("index.ts");

@@ -1,5 +1,12 @@
 import type { ClassificationRule } from "./models.js";
 
+export interface Account {
+  email: string;
+  refreshToken: string;
+  lastHistoryId: string;
+  watchExpiration: Date | null;
+}
+
 export interface SaveClassificationInput {
   messageId: string;
   historyId: string | null;
@@ -11,6 +18,7 @@ export interface SaveClassificationInput {
   reason: string;
   quarantined: boolean;
   rawHeaders: Record<string, string>;
+  accountEmail?: string;
 }
 
 export interface HealthStats {
@@ -41,5 +49,10 @@ export interface DatabasePort {
   checkHealth(): Promise<HealthStats>;
   getRecentClassifications(limit?: number): Promise<ClassificationRow[]>;
   getRules(): Promise<ClassificationRule[]>;
+  getAccounts(): Promise<Account[]>;
+  getAccount(email: string): Promise<Account | null>;
+  upsertAccount(email: string, refreshToken: string): Promise<void>;
+  getAccountHistoryId(email: string): Promise<string>;
+  updateAccountHistoryId(email: string, historyId: string): Promise<void>;
   close(): Promise<void>;
 }

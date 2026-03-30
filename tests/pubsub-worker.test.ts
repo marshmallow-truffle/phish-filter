@@ -1,4 +1,3 @@
-// tests/pubsub-worker.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PubSubWorker } from "../src/pubsub-worker.js";
 import { parseEmailMessage } from "../src/gmail-client.js";
@@ -23,14 +22,18 @@ function makeRawMessage(msgId: string) {
 }
 
 function makeMocks() {
+  const gmail = {
+    getHistory: vi.fn().mockResolvedValue(["msg1"]),
+    getMessage: vi.fn().mockImplementation((id: string) =>
+      Promise.resolve(parseEmailMessage(makeRawMessage(id)))
+    ),
+    quarantineMessage: vi.fn().mockResolvedValue(undefined),
+    watch: vi.fn().mockResolvedValue({ historyId: "200", expiration: "9999" }),
+  };
   return {
-    gmail: {
-      getHistory: vi.fn().mockResolvedValue(["msg1"]),
-      getMessage: vi.fn().mockImplementation((id: string) =>
-        Promise.resolve(parseEmailMessage(makeRawMessage(id)))
-      ),
-      quarantineMessage: vi.fn().mockResolvedValue(undefined),
-      watch: vi.fn().mockResolvedValue({ historyId: "200", expiration: "9999" }),
+    gmail,
+    accountManager: {
+      get: vi.fn().mockReturnValue(gmail),
     },
     classifier: {
       classify: vi.fn().mockResolvedValue({
@@ -42,8 +45,8 @@ function makeMocks() {
     db: {
       isProcessed: vi.fn().mockResolvedValue(false),
       saveClassification: vi.fn().mockResolvedValue(true),
-      getLastHistoryId: vi.fn().mockResolvedValue("50"),
-      updateLastHistoryId: vi.fn().mockResolvedValue(undefined),
+      getAccountHistoryId: vi.fn().mockResolvedValue("50"),
+      updateAccountHistoryId: vi.fn().mockResolvedValue(undefined),
     },
   };
 }
@@ -55,23 +58,26 @@ describe("PubSubWorker", () => {
   beforeEach(() => {
     mocks = makeMocks();
     worker = new PubSubWorker(
-      mocks.gmail as any,
+      mocks.accountManager as any,
       mocks.classifier as any,
       mocks.db as any
     );
   });
 
   it("processes a new message", async () => {
-    const result = await worker.processMessage("msg1");
+    const result = await worker.processMessage("msg1", mocks.gmail as any, "user@gmail.com");
     expect(result).toBe(true);
     expect(mocks.gmail.getMessage).toHaveBeenCalledWith("msg1");
     expect(mocks.classifier.classify).toHaveBeenCalledOnce();
     expect(mocks.db.saveClassification).toHaveBeenCalledOnce();
+    // Verify accountEmail is passed through
+    const saveCall = mocks.db.saveClassification.mock.calls[0][0];
+    expect(saveCall.accountEmail).toBe("user@gmail.com");
   });
 
   it("skips already-processed message", async () => {
     mocks.db.isProcessed.mockResolvedValue(true);
-    const result = await worker.processMessage("msg1");
+    const result = await worker.processMessage("msg1", mocks.gmail as any);
     expect(result).toBe(false);
     expect(mocks.gmail.getMessage).not.toHaveBeenCalled();
   });
@@ -82,24 +88,25 @@ describe("PubSubWorker", () => {
       confidence: 0.95,
       reason: "Suspicious URL",
     });
-    await worker.processMessage("msg1");
+    await worker.processMessage("msg1", mocks.gmail as any);
     expect(mocks.gmail.quarantineMessage).toHaveBeenCalledWith("msg1");
   });
 
   it("does not quarantine benign messages", async () => {
-    await worker.processMessage("msg1");
+    await worker.processMessage("msg1", mocks.gmail as any);
     expect(mocks.gmail.quarantineMessage).not.toHaveBeenCalled();
   });
 
-  it("processes a Pub/Sub notification", async () => {
+  it("routes notification by emailAddress", async () => {
     const data = JSON.stringify({
       emailAddress: "user@gmail.com",
       historyId: "100",
     });
     await worker.processNotification(Buffer.from(data));
-    expect(mocks.db.getLastHistoryId).toHaveBeenCalledOnce();
+    expect(mocks.accountManager.get).toHaveBeenCalledWith("user@gmail.com");
+    expect(mocks.db.getAccountHistoryId).toHaveBeenCalledWith("user@gmail.com");
     expect(mocks.gmail.getHistory).toHaveBeenCalledWith("50");
-    expect(mocks.db.updateLastHistoryId).toHaveBeenCalledWith("100");
+    expect(mocks.db.updateAccountHistoryId).toHaveBeenCalledWith("user@gmail.com", "100");
   });
 
   it("ignores notification without historyId", async () => {
@@ -108,12 +115,10 @@ describe("PubSubWorker", () => {
     expect(mocks.gmail.getHistory).not.toHaveBeenCalled();
   });
 
-  it("catches up on missed messages", async () => {
-    mocks.gmail.getHistory.mockResolvedValue(["msg1", "msg2"]);
-    const processed = await worker.catchUp();
-    expect(processed).toBe(2);
-    expect(mocks.db.saveClassification).toHaveBeenCalledTimes(2);
-    expect(mocks.gmail.watch).toHaveBeenCalledOnce();
-    expect(mocks.db.updateLastHistoryId).toHaveBeenCalledWith("200");
+  it("ignores notification for unknown account", async () => {
+    mocks.accountManager.get.mockReturnValue(undefined);
+    const data = JSON.stringify({ emailAddress: "unknown@gmail.com", historyId: "100" });
+    await worker.processNotification(Buffer.from(data));
+    expect(mocks.gmail.getHistory).not.toHaveBeenCalled();
   });
 });

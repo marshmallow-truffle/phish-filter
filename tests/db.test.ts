@@ -79,6 +79,30 @@ describe("PgDatabase", () => {
     expect(sql).toContain("WHERE enabled = TRUE");
   });
 
+  it("getAccounts returns mapped rows", async () => {
+    pool.query.mockResolvedValueOnce({
+      rows: [{ email: "a@b.com", refresh_token: "tok", last_history_id: "50", watch_expiration: null }],
+    });
+    const accounts = await db.getAccounts();
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0].email).toBe("a@b.com");
+    expect(accounts[0].refreshToken).toBe("tok");
+    expect(accounts[0].lastHistoryId).toBe("50");
+  });
+
+  it("upsertAccount calls INSERT ON CONFLICT", async () => {
+    pool.query.mockResolvedValueOnce({ rows: [] });
+    await db.upsertAccount("a@b.com", "tok");
+    const [sql] = pool.query.mock.calls[0];
+    expect(sql).toContain("INSERT INTO accounts");
+    expect(sql).toContain("ON CONFLICT");
+  });
+
+  it("getAccountHistoryId returns string", async () => {
+    pool.query.mockResolvedValueOnce({ rows: [{ last_history_id: "999" }] });
+    expect(await db.getAccountHistoryId("a@b.com")).toBe("999");
+  });
+
   it("implements DatabasePort interface", () => {
     const port: DatabasePort = db;
     expect(port.isProcessed).toBeTypeOf("function");
@@ -88,6 +112,10 @@ describe("PgDatabase", () => {
     expect(port.checkHealth).toBeTypeOf("function");
     expect(port.getRecentClassifications).toBeTypeOf("function");
     expect(port.getRules).toBeTypeOf("function");
+    expect(port.getAccounts).toBeTypeOf("function");
+    expect(port.upsertAccount).toBeTypeOf("function");
+    expect(port.getAccountHistoryId).toBeTypeOf("function");
+    expect(port.updateAccountHistoryId).toBeTypeOf("function");
     expect(port.close).toBeTypeOf("function");
   });
 });
